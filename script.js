@@ -224,6 +224,7 @@ const resetarWizard = () => {
 };
 
 /* ---- PAINEL BARBEIRO ---- */
+/* ---- PAINEL BARBEIRO ---- */
 const renderizarAgendaBarbeiro = () => {
     const bid = appState.usuarioAtual?.id;
     const hoje = mockBookings.filter(b => b.barbeiroId === bid);
@@ -240,9 +241,16 @@ const renderizarAgendaBarbeiro = () => {
         c.innerHTML = hoje.map(bk => {
             const sv = mockServices.find(s => s.id === bk.serviceId);
             return `<div class="agenda-item">
-                <div class="agenda-item-cliente">👤 ${bk.clientName}</div>
-                <div class="agenda-item-servico"><i class="bi bi-scissors"></i> ${sv?.name||"Serviço"}</div>
-                <div class="agenda-item-hora"><i class="bi bi-clock"></i> ${bk.time}</div>
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="agenda-item-cliente">👤 ${bk.clientName}</div>
+                        <div class="agenda-item-servico"><i class="bi bi-scissors"></i> ${sv?.name||"Serviço"}</div>
+                        <div class="agenda-item-hora"><i class="bi bi-clock"></i> ${bk.time}</div>
+                    </div>
+                    <button class="btn btn-success btn-sm" style="padding: 0.35rem 0.6rem; font-size: 0.8rem;" onclick="window.abrirModalPagamento(${bk.id})">
+                        <i class="bi bi-check2-all"></i> Concluir
+                    </button>
+                </div>
             </div>`;
         }).join("");
     }
@@ -372,17 +380,24 @@ window.abrirModalEscala = (id) => {
     new bootstrap.Modal(document.getElementById("modalEscala")).show();
 };
 
-window.salvarEscala = () => {
-    const ini = document.getElementById("escala-hora-inicio").value;
-    const fim = document.getElementById("escala-hora-fim").value;
+/* ---- MODAL: PAGAMENTO ---- */
+window.abrirModalPagamento = (id) => {
+    appState.editingId = id; // Guarda qual agendamento estamos a concluir
+    new bootstrap.Modal(document.getElementById("modalPagamento")).show();
+};
+
+window.confirmarPagamento = () => {
+    const forma = document.getElementById("forma-pagamento").value;
     
-    if (!ini||!fim) { alert("Preencha os horários"); return; }
+    // Simula a conclusão: remove o agendamento da lista falsa
+    const index = mockBookings.findIndex(b => b.id === appState.editingId);
+    if (index > -1) {
+        mockBookings.splice(index, 1);
+    }
     
-    const b = mockBarbers.find(x => x.id === appState.editingId);
-    if (b) { b.escalaInicio = ini; b.escalaFim = fim; }
-    
-    bootstrap.Modal.getInstance(document.getElementById("modalEscala")).hide();
-    renderizarEquipa();
+    bootstrap.Modal.getInstance(document.getElementById("modalPagamento")).hide();
+    renderizarAgendaBarbeiro(); // Atualiza a tela para o cartão sumir
+    alert(`✅ Atendimento concluído com sucesso!\nForma de pagamento: ${forma}`);
 };
 
 /* ---- UTILITÁRIOS ---- */
