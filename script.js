@@ -241,13 +241,13 @@ const renderizarAgendaBarbeiro = () => {
         c.innerHTML = hoje.map(bk => {
             const sv = mockServices.find(s => s.id === bk.serviceId);
             return `<div class="agenda-item">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div style="min-width: 150px;">
                         <div class="agenda-item-cliente">👤 ${bk.clientName}</div>
                         <div class="agenda-item-servico"><i class="bi bi-scissors"></i> ${sv?.name||"Serviço"}</div>
                         <div class="agenda-item-hora"><i class="bi bi-clock"></i> ${bk.time}</div>
                     </div>
-                    <button class="btn btn-success btn-sm" style="padding: 0.35rem 0.6rem; font-size: 0.8rem;" onclick="window.abrirModalPagamento(${bk.id})">
+                    <button class="btn btn-success btn-sm flex-shrink-0" style="padding: 0.45rem 0.8rem; font-size: 0.85rem;" onclick="window.abrirModalPagamento(${bk.id})">
                         <i class="bi bi-check2-all"></i> Concluir
                     </button>
                 </div>
