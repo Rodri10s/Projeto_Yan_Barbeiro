@@ -7,9 +7,7 @@
 
 /* ---- MOCK DATA ---- */
 const mockBarbers = [
-    { id:1, name:"João Silva",    password:"senha123", img:"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200", tags:"Barba, Corte Clássico", escalaInicio:"09:00", escalaFim:"18:00" },
-    { id:2, name:"Maria Santos",  password:"senha123", img:"https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200", tags:"Design de Barba, Coloração", escalaInicio:"10:00", escalaFim:"19:00" },
-    { id:3, name:"Pedro Oliveira",password:"senha123", img:"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200", tags:"Corte Premium, Barboterapia", escalaInicio:"08:00", escalaFim:"17:00" }
+    { id:1, name:"Yan",    password:"123", img:"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200", tags:"Barba, Corte Clássico", escalaInicio:"09:00", escalaFim:"18:00" },
 ];
 
 const mockServices = [
