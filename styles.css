@@ -31,7 +31,7 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 
 html, body {
-    height: 100%;
+    min-height: 100vh; /* <-- Alterado aqui para permitir o scroll */
     font-family: var(--font-body);
     background: var(--bg);
     color: var(--text);
@@ -300,11 +300,11 @@ body { padding-bottom: 84px; }
     background: #ffffff;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: .85rem .4rem;
+    padding: .6rem .4rem; /* <-- Reduzido o enchimento */
     cursor: pointer;
     font-size:.88rem; font-weight:500;
     color: var(--text);
-    min-height:52px;
+    min-height: 44px; /* <-- Reduzida a altura mínima */
     transition: all var(--transition);
     font-family: var(--font-body);
 }
