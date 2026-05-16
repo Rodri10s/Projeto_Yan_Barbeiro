@@ -13,11 +13,13 @@ const mockBarbers = [
 ];
 
 const mockServices = [
-    { id:1, name:"Corte Clássico",  price:15, duration:30, img:"https://images.unsplash.com/photo-1585747860715-cd4628902d4a?w=200" },
-    { id:2, name:"Barba Completa",  price:20, duration:45, img:"https://images.unsplash.com/photo-1621605805917-b8a2c0f94ffa?w=200" },
-    { id:3, name:"Corte + Barba",   price:30, duration:60, img:"https://images.unsplash.com/photo-1599351431202-924373aed4ab?w=200" },
-    { id:4, name:"Design de Barba", price:25, duration:50, img:"https://images.unsplash.com/photo-1578255473066-b39899ae7170?w=200" },
-    { id:5, name:"Barboterapia",    price:35, duration:60, img:"https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?w=200" }
+    { id:1, name:"Contorno (Pezinho)",             price:10, duration:15, img:"https://images.unsplash.com/photo-1599351431202-924373aed4ab?w=200" },
+    { id:2, name:"Sobrancelha",                    price:10, duration:15, img:"https://images.unsplash.com/photo-1578255473066-b39899ae7170?w=200" },
+    { id:3, name:"Barba",                          price:25, duration:30, img:"https://images.unsplash.com/photo-1621605805917-b8a2c0f94ffa?w=200" },
+    { id:4, name:"Corte Social (Máquina/Tesoura)", price:25, duration:30, img:"https://images.unsplash.com/photo-1585747860715-cd4628902d4a?w=200" },
+    { id:5, name:"Corte Só na Tesoura",            price:30, duration:40, img:"https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=200" },
+    { id:6, name:"Corte Degradê",                  price:30, duration:45, img:"https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?w=200" },
+    { id:7, name:"Corte + Barba + Sobrancelha",    price:50, duration:60, img:"https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=200" }
 ];
 
 const mockBookings = [
