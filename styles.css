@@ -281,8 +281,12 @@ body { padding-bottom: 84px; }
     box-shadow: 0 0 0 3px rgba(26,115,232,.15);
 }
 .service-card h6, .barbeiro-card h6 {
-    font-size:.9rem; font-weight:600; color:var(--text);
-    margin-bottom:.2rem;
+    font-size: .9rem; 
+    font-weight: 600; 
+    color: var(--text);
+    margin-bottom: .2rem;
+    word-wrap: break-word; /* Força nomes muito longos a quebrarem a linha */
+    line-height: 1.2;
 }
 .service-card .price { 
     font-size:.95rem; font-weight:700; color:var(--primary); 
