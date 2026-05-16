@@ -7,7 +7,7 @@
 
 /* ---- MOCK DATA ---- */
 const mockBarbers = [
-    { id:1, name:"Yan",    password:"123", img:"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200", tags:"Barba, Corte Clássico", escalaInicio:"09:00", escalaFim:"18:00" },
+    { id:1, name:"Yan", password:"123", img:"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80", tags:"Corte, Barba", escalaInicio:"09:00", escalaFim:"18:00" }
 ];
 
 const mockServices = [
@@ -411,5 +411,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
     mudarTela("view-cliente-form");
     console.log("🎉 Yan Barbeiro carregado!");
-    console.log("🔑 Admin: password123 | Barbeiros: João/Maria/Pedro + senha123");
+    console.log("🔑 Admin: password123 | Barbeiro: Yan + 123");
 });
