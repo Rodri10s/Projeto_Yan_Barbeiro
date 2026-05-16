@@ -11,10 +11,10 @@ const mockBarbers = [
 ];
 
 const mockServices = [
-    { id:1, name:"Contorno (Pezinho)",             price:10, duration:15, img:"https://images.unsplash.com/photo-1599351431202-924373aed4ab?auto=format&fit=crop&w=200&q=80" },
-    { id:2, name:"Sobrancelha",                    price:10, duration:10, img:"https://images.unsplash.com/photo-1578255473066-b39899ae7170?auto=format&fit=crop&w=200&q=80" },
-    { id:3, name:"Barba",                          price:25, duration:30, img:"https://images.unsplash.com/photo-1621605805917-b8a2c0f94ffa?auto=format&fit=crop&w=200&q=80" },
-    { id:4, name:"Corte Social (Máq/Tesoura)",     price:25, duration:30, img:"https://images.unsplash.com/photo-1585747860715-cd4628902d4a?auto=format&fit=crop&w=200&q=80" },
+    { id:1, name:"Contorno (Pezinho)",             price:10, duration:15, img:"https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=200&q=80" },
+    { id:2, name:"Sobrancelha",                    price:10, duration:10, img:"https://images.unsplash.com/photo-1593702275687-f8b402bf1fb5?auto=format&fit=crop&w=200&q=80" },
+    { id:3, name:"Barba",                          price:25, duration:30, img:"https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=200&q=80" },
+    { id:4, name:"Corte Social (Máq/Tesoura)",     price:25, duration:30, img:"https://images.unsplash.com/photo-1605497788044-5a32c7078486?auto=format&fit=crop&w=200&q=80" },
     { id:5, name:"Corte Só na Tesoura",            price:30, duration:30, img:"https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=200&q=80" },
     { id:6, name:"Corte Degradê",                  price:30, duration:30, img:"https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?auto=format&fit=crop&w=200&q=80" },
     { id:7, name:"Corte + Barba + Sobrancelha",    price:50, duration:70, img:"https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=200&q=80" }
