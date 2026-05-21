@@ -25,6 +25,250 @@ const mockBookings = [
     { id:2, clientName:"Tiago Ferreira", serviceId:2, barbeiroId:1, time:"11:00", price:20 }
 ];
 
+const mockCompletedBookings = [];
+const mockAddresses = JSON.parse(localStorage.getItem("yanBarbeiro_enderecos") || "[]");
+
+const salvarEnderecosStorage = () => {
+    localStorage.setItem("yanBarbeiro_enderecos", JSON.stringify(mockAddresses));
+};
+
+const getEnderecoAtivo = () => mockAddresses.length ? mockAddresses[0] : null;
+
+const formatarMoeda = (value) => {
+    return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(value).replace("€", "R$");
+};
+
+const criarPainelAdminExtras = () => {
+    const adminBody = document.querySelector("#view-admin .section-body");
+    if (!adminBody || document.getElementById("admin-financeiro-bloco")) return;
+
+    const extraHTML = `
+        <div class="admin-section" id="admin-financeiro-bloco">
+          <p class="admin-section-title mb-3">
+            <i class="bi bi-wallet2"></i> Financeiro
+          </p>
+          
+          <div class="row g-2 mb-4">
+            <div class="col-12 col-md-4">
+              <label class="form-label" style="font-size: 0.85rem;">Dia</label>
+              <input type="date" id="filtro-relatorio-dia" class="form-control" onchange="window.aplicarFiltroRelatorio()" />
+              <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 0.25rem;">Deixe vazio para todos os dias</small>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label" style="font-size: 0.85rem;">Mês</label>
+              <select id="filtro-relatorio-mes" class="form-control" onchange="window.aplicarFiltroRelatorio()">
+                <option value="">Todos os meses</option>
+                <option value="01">Janeiro</option>
+                <option value="02">Fevereiro</option>
+                <option value="03">Março</option>
+                <option value="04">Abril</option>
+                <option value="05">Maio</option>
+                <option value="06">Junho</option>
+                <option value="07">Julho</option>
+                <option value="08">Agosto</option>
+                <option value="09">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label" style="font-size: 0.85rem;">Ano</label>
+              <select id="filtro-relatorio-ano" class="form-control" onchange="window.aplicarFiltroRelatorio()">
+                <option value="">Todos os anos</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-6">
+              <div class="stat-card">
+                <div>
+                  <p class="stat-label">Ganhos Semanais</p>
+                  <div class="stat-value" id="ganho-semanal">R$ 0,00</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="stat-card">
+                <div>
+                  <p class="stat-label">Ganhos Mensais</p>
+                  <div class="stat-value" id="ganho-mensal">R$ 0,00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-2 mt-4">
+            <div class="col-12 col-md-6">
+              <button class="btn btn-primary w-100" onclick="window.gerarRelatórioMensal()">
+                <i class="bi bi-file-earmark-pdf"></i> Gerar Relatório Mensal
+              </button>
+            </div>
+            <div class="col-12 col-md-6">
+              <button class="btn btn-primary w-100" onclick="window.gerarRelatórioAnual()">
+                <i class="bi bi-file-earmark-pdf"></i> Gerar Relatório Anual
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="admin-section" id="admin-endereco-bloco">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <p class="admin-section-title mb-0">
+              <i class="bi bi-geo-alt"></i> Endereços
+            </p>
+            <button class="btn btn-accent btn-sm" onclick="window.abrirModalEndereco()">
+              <i class="bi bi-plus-circle"></i> Novo
+            </button>
+          </div>
+          <div class="admin-list" id="lista-enderecos"></div>
+        </div>
+    `;
+
+    adminBody.insertAdjacentHTML("afterbegin", extraHTML);
+
+    if (!document.getElementById("modalEndereco")) {
+        const modalHTML = `
+          <div class="modal fade" id="modalEndereco" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="modalEnderecoTitle">Novo Endereço</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                  <div class="mb-3">
+                    <label class="form-label">Rua</label>
+                    <input type="text" id="endereco-rua" class="form-control" placeholder="Ex: Rua das Flores" required />
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label">Número</label>
+                      <input type="text" id="endereco-numero" class="form-control" placeholder="Ex: 120" required />
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label">Bairro</label>
+                      <input type="text" id="endereco-bairro" class="form-control" placeholder="Ex: Centro" required />
+                    </div>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="button" class="btn btn-primary" onclick="window.salvarEndereco()">Guardar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.insertAdjacentHTML("beforeend", modalHTML);
+    }
+};
+
+const calcularValoresFinanceiros = () => {
+    const agora = new Date();
+    const seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const comecoMes = new Date(agora.getFullYear(), agora.getMonth(), 1, 0, 0, 0, 0);
+
+    const weekTotal = mockCompletedBookings.reduce((acc, b) => {
+        const data = new Date(b.completedAt || b.createdAt || agora);
+        return data >= seteDiasAtras ? acc + b.price : acc;
+    }, 0);
+
+    const monthTotal = mockCompletedBookings.reduce((acc, b) => {
+        const data = new Date(b.completedAt || b.createdAt || agora);
+        return data >= comecoMes ? acc + b.price : acc;
+    }, 0);
+
+    return { weekTotal, monthTotal };
+};
+
+const renderizarAdminFinanceiro = () => {
+    const ganhoSemanal = document.getElementById("ganho-semanal");
+    const ganhoMensal = document.getElementById("ganho-mensal");
+    if (!ganhoSemanal || !ganhoMensal) return;
+    const { weekTotal, monthTotal } = calcularValoresFinanceiros();
+    ganhoSemanal.textContent = formatarMoeda(weekTotal);
+    ganhoMensal.textContent = formatarMoeda(monthTotal);
+};
+
+const renderizarEnderecos = () => {
+    const container = document.getElementById("lista-enderecos");
+    if (!container) return;
+    if (!mockAddresses.length) {
+        container.innerHTML = `<div class="empty-state"><i class="bi bi-geo-alt"></i><p>Nenhum endereço cadastrado</p></div>`;
+        return;
+    }
+    container.innerHTML = mockAddresses.map((endereco, index) => `
+        <div class="admin-item">
+          <div style="flex:1">
+            <div class="admin-item-name">${endereco.rua}, ${endereco.numero}</div>
+            <div class="admin-item-desc">${endereco.bairro}</div>
+          </div>
+          <div class="admin-item-actions">
+            <button class="btn-icon" onclick="window.abrirModalEndereco(${index})" title="Editar"><i class="bi bi-pencil"></i></button>
+            <button class="btn-icon" onclick="window.removerEndereco(${index})" title="Remover"><i class="bi bi-trash"></i></button>
+          </div>
+        </div>
+    `).join("");
+};
+
+window.abrirModalEndereco = (index = null) => {
+    appState.editingEnderecoIndex = index;
+    const endereco = typeof index === "number" ? mockAddresses[index] : null;
+    document.getElementById("modalEnderecoTitle").textContent = endereco ? "Editar Endereço" : "Novo Endereço";
+    document.getElementById("endereco-rua").value = endereco?.rua || "";
+    document.getElementById("endereco-numero").value = endereco?.numero || "";
+    document.getElementById("endereco-bairro").value = endereco?.bairro || "";
+
+    const modalElement = document.getElementById("modalEndereco");
+    if (!modalElement) return;
+
+    if (!appState.enderecoModalInstance) {
+        appState.enderecoModalInstance = new bootstrap.Modal(modalElement);
+        modalElement.querySelectorAll("[data-bs-dismiss='modal']").forEach(button => {
+            button.addEventListener("click", () => appState.enderecoModalInstance?.hide());
+        });
+    }
+
+    appState.enderecoModalInstance.show();
+};
+
+window.salvarEndereco = () => {
+    const rua = document.getElementById("endereco-rua").value.trim();
+    const numero = document.getElementById("endereco-numero").value.trim();
+    const bairro = document.getElementById("endereco-bairro").value.trim();
+    if (!rua || !numero || !bairro) {
+        alert("Por favor, preencha rua, número e bairro.");
+        return;
+    }
+    const endereco = { rua, numero, bairro };
+    if (typeof appState.editingEnderecoIndex === "number") {
+        mockAddresses[appState.editingEnderecoIndex] = endereco;
+    } else {
+        mockAddresses.push(endereco);
+    }
+
+    salvarEnderecosStorage();
+    renderizarEnderecos();
+
+    const modalElement = document.getElementById("modalEndereco");
+    const modalInstance = bootstrap.Modal.getInstance(modalElement) || new bootstrap.Modal(modalElement);
+    modalInstance.hide();
+    appState.editingEnderecoIndex = null;
+};
+
+window.removerEndereco = (index) => {
+    if (index < 0 || index >= mockAddresses.length) return;
+    mockAddresses.splice(index, 1);
+    salvarEnderecosStorage();
+    renderizarEnderecos();
+};
+
+const atualizarEnderecoAtivo = () => {
+    const endereco = getEnderecoAtivo();
+    return endereco ? `${endereco.rua}, ${endereco.numero} — ${endereco.bairro}` : null;
+};
+
 /* ---- ESTADO ---- */
 const appState = {
     usuarioAtual: null,
@@ -32,7 +276,9 @@ const appState = {
     clienteAtual: { nome:null, telefone:null, email:null },
     agendamento:  { servicoId:null, barbeiroId:null, horario:null, servicoNome:null, barbeiroNome:null, servico:null, barbeiro:null },
     editingId: null,
-    editingType: null
+    editingType: null,
+    editingEnderecoIndex: null,
+    enderecoModalInstance: null
 };
 
 /* ---- NAVEGAÇÃO ---- */
@@ -49,7 +295,7 @@ window.mudarTela = (idTela) => {
 
     if (idTela === "view-cliente")  { renderizarServicos(); resetarWizard(); }
     if (idTela === "view-barbeiro") { renderizarAgendaBarbeiro(); }
-    if (idTela === "view-admin")    { renderizarEquipa(); renderizarServicosAdmin(); }
+    if (idTela === "view-admin")    { criarPainelAdminExtras(); renderizarAdminFinanceiro(); renderizarEnderecos(); renderizarEquipa(); renderizarServicosAdmin(); popularAnosRelatorio(); }
 };
 
 /* ---- AUTENTICAÇÃO ---- */
@@ -193,10 +439,12 @@ const atualizarResumo = () => {
     document.getElementById("resumo-barbeiro").textContent = appState.agendamento.barbeiroNome || "-";
     document.getElementById("resumo-horario").textContent  = appState.agendamento.horario ? `Hoje, ${appState.agendamento.horario}` : "-";
     document.getElementById("resumo-preco").textContent = appState.agendamento.servico ? `R$ ${appState.agendamento.servico.price}` : "-";
+    
+    const endereco = getEnderecoAtivo();
+    document.getElementById("resumo-local").textContent = endereco ? `${endereco.rua}, ${endereco.numero} — ${endereco.bairro}` : "-";
 };
 
 window.confirmarAgendamento = () => {
-    alert(`✅ Agendamento confirmado para ${appState.agendamento.horario}!\n\nEm breve receberá confirmação por SMS.`);
     // TODO: Substituir por addDoc no Firestore na Fase 2
     mockBookings.push({
         id: mockBookings.length+1,
@@ -204,8 +452,14 @@ window.confirmarAgendamento = () => {
         serviceId:  appState.agendamento.servicoId,
         barbeiroId: appState.agendamento.barbeiroId,
         time:       appState.agendamento.horario,
-        price:      appState.agendamento.servico.price
+        price:      appState.agendamento.servico.price,
+        createdAt:  new Date().toISOString(),
+        completed:  false
     });
+
+    const endereco = getEnderecoAtivo();
+    const enderecoTexto = endereco ? `A barbearia está localizada em:\n${endereco.rua}, ${endereco.numero} — ${endereco.bairro}` : "O endereço da barbearia ainda não foi cadastrado.";
+    alert(`✅ Agendamento confirmado para ${appState.agendamento.horario}!\n\n${enderecoTexto}`);
 
     document.getElementById("cliente-nome").value = "";
     document.getElementById("cliente-telefone").value = "";
@@ -388,16 +642,132 @@ window.abrirModalPagamento = (id) => {
 
 window.confirmarPagamento = () => {
     const forma = document.getElementById("forma-pagamento").value;
-    
-    // Simula a conclusão: remove o agendamento da lista falsa
     const index = mockBookings.findIndex(b => b.id === appState.editingId);
     if (index > -1) {
+        const item = mockBookings[index];
+        mockCompletedBookings.push({
+            ...item,
+            completed: true,
+            completedAt: new Date().toISOString()
+        });
         mockBookings.splice(index, 1);
     }
-    
     bootstrap.Modal.getInstance(document.getElementById("modalPagamento")).hide();
-    renderizarAgendaBarbeiro(); // Atualiza a tela para o cartão sumir
+    renderizarAgendaBarbeiro();
+    renderizarAdminFinanceiro();
     alert(`✅ Atendimento concluído com sucesso!\nForma de pagamento: ${forma}`);
+};
+
+/* ---- FILTRO DE RELATÓRIO ---- */
+window.popularAnosRelatorio = () => {
+    const selectAno = document.getElementById("filtro-relatorio-ano");
+    if (!selectAno) return;
+    
+    const anoAtual = new Date().getFullYear();
+    const anos = [];
+    
+    // Gera últimos 5 anos para o dropdown
+    for (let i = 0; i < 5; i++) {
+        anos.push(anoAtual - i);
+    }
+    
+    // Limpa as opções exceto a primeira
+    while (selectAno.options.length > 1) {
+        selectAno.remove(1);
+    }
+    
+    // Adiciona os anos
+    anos.forEach(ano => {
+        const option = document.createElement("option");
+        option.value = ano;
+        option.textContent = ano;
+        selectAno.appendChild(option);
+    });
+};
+
+/* ---- GERAÇÃO DE RELATÓRIOS ---- */
+window.gerarRelatórioMensal = () => {
+    const mes = document.getElementById("filtro-relatorio-mes")?.value || "";
+    const ano = document.getElementById("filtro-relatorio-ano")?.value || "";
+    
+    // Preparado para integração com backend
+    console.log("📋 Gerando Relatório Mensal:", { mes, ano });
+    console.log("💡 Integração futura com formatos: PDF, Excel, Impressão");
+    
+    // Estrutura preparada para futura exportação
+    const relatorioData = {
+        tipo: "mensal",
+        mes: mes || new Date().getMonth() + 1,
+        ano: ano || new Date().getFullYear(),
+        dados: {
+            lucrosMes: 0,       // TODO: Buscar do backend
+            atendimentos: 0,     // TODO: Buscar do backend
+            faturamento: 0       // TODO: Buscar do backend
+        }
+    };
+    
+    console.log("📊 Estrutura de dados preparada:", relatorioData);
+    
+    // TODO: Integração com backend
+    // fetch(`/api/relatorio/mensal?mes=${mes}&ano=${ano}`)
+    //     .then(res => res.json())
+    //     .then(data => exportarRelatorio(data, 'mensal'));
+    
+    // TODO: Formatos de exportação a implementar
+    // - exportarPDF(relatorioData)
+    // - exportarExcel(relatorioData)
+    // - imprimirRelatorio(relatorioData)
+    
+    alert("⏳ Relatório Mensal - Integração em desenvolvimento");
+};
+
+window.gerarRelatórioAnual = () => {
+    const ano = document.getElementById("filtro-relatorio-ano")?.value || "";
+    
+    // Preparado para integração com backend
+    console.log("📋 Gerando Relatório Anual:", { ano });
+    console.log("💡 Integração futura com formatos: PDF, Excel, Impressão");
+    
+    // Estrutura preparada para futura exportação
+    const relatorioData = {
+        tipo: "anual",
+        ano: ano || new Date().getFullYear(),
+        dados: {
+            lucrosAno: 0,        // TODO: Buscar do backend
+            totalAtendimentos: 0, // TODO: Buscar do backend
+            faturamentoAnual: 0   // TODO: Buscar do backend
+        }
+    };
+    
+    console.log("📊 Estrutura de dados preparada:", relatorioData);
+    
+    // TODO: Integração com backend
+    // fetch(`/api/relatorio/anual?ano=${ano}`)
+    //     .then(res => res.json())
+    //     .then(data => exportarRelatorio(data, 'anual'));
+    
+    // TODO: Formatos de exportação a implementar
+    // - exportarPDF(relatorioData)
+    // - exportarExcel(relatorioData)
+    // - imprimirRelatorio(relatorioData)
+    
+    alert("⏳ Relatório Anual - Integração em desenvolvimento");
+};
+
+window.aplicarFiltroRelatorio = () => {
+    const dia = document.getElementById("filtro-relatorio-dia")?.value || "";
+    const mes = document.getElementById("filtro-relatorio-mes")?.value || "";
+    const ano = document.getElementById("filtro-relatorio-ano")?.value || "";
+    
+    // Preparado para integração com backend
+    // Aqui virá a chamada à API com os filtros selecionados
+    console.log("📊 Filtro de Relatório aplicado:", { dia, mes, ano });
+    console.log("💡 Integração futura: Chamar API com filtros de dia, mês e ano");
+    
+    // TODO: Implementar integração com backend
+    // fetch(`/api/relatorio?dia=${dia}&mes=${mes}&ano=${ano}`)
+    //     .then(res => res.json())
+    //     .then(data => atualizarRelatorio(data));
 };
 
 /* ---- UTILITÁRIOS ---- */
