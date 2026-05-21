@@ -470,6 +470,42 @@ input[type="file"]::file-selector-button {
 input[type="file"]::file-selector-button:hover { background: var(--primary-dark); }
 
 /* ============================================================
+    FILTRO DE RELATÓRIO
+    ============================================================ */
+#filtro-relatorio-dia,
+#filtro-relatorio-mes,
+#filtro-relatorio-ano {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: .65rem .85rem;
+    font-size: .9rem;
+    font-family: var(--font-body);
+    background: #ffffff;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+#filtro-relatorio-dia:focus,
+#filtro-relatorio-mes:focus,
+#filtro-relatorio-ano:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(26,115,232,.12);
+    outline: none;
+}
+
+/* Input date picker */
+#filtro-relatorio-dia::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    padding: .25rem;
+}
+
+#filtro-relatorio-dia::-webkit-calendar-picker-indicator:hover {
+    background-color: rgba(26,115,232,.1);
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media(max-width:576px){
