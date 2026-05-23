@@ -258,7 +258,28 @@ window.criarPainelAdminExtras = () => {
         `;
         document.body.insertAdjacentHTML("beforeend", modalHTML);
     }
+    if (!document.getElementById("modalEndereco")) {
+        const modalEnderecoHTML = `
+          <div class="modal fade" id="modalEndereco" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title" id="modalEnderecoTitle">Endereço</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                  <div class="mb-3"><label class="form-label">Rua</label><input type="text" id="endereco-rua" class="form-control" placeholder="Ex: Rua das Flores" required /></div>
+                  <div class="row g-2">
+                    <div class="col-6"><label class="form-label">Número</label><input type="text" id="endereco-numero" class="form-control" required /></div>
+                    <div class="col-6"><label class="form-label">Bairro</label><input type="text" id="endereco-bairro" class="form-control" required /></div>
+                  </div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-outline" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" onclick="window.salvarEndereco()">Guardar</button></div>
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.insertAdjacentHTML("beforeend", modalEnderecoHTML);
+    }
     window.popularFiltroBarbeiros();
+
 };
 
 window.toggleFiltroPersonalizado = () => {
