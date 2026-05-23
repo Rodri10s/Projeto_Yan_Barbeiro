@@ -1,8 +1,245 @@
 /* ============================================================
-   MÓDULO ADMIN — GESTÃO DO SALÃO
+   1. LEITURA DE DADOS (READ) - COM STATUS ATIVO/INATIVO
    ============================================================ */
+window.renderizarEquipa = async () => {
+    const container = document.getElementById("lista-equipa");
+    container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm text-primary"></span> Carregando equipa...</div>';
+
+    try {
+        const querySnapshot = await window.getDocs(window.collection(window.db, "profissionais"));
+        window.mockBarbers = []; 
+        querySnapshot.forEach((doc) => { window.mockBarbers.push({ id: doc.id, ...doc.data() }); });
+
+        if (window.mockBarbers.length === 0) return container.innerHTML = '<p class="text-muted text-center mt-3">Nenhum profissional cadastrado.</p>';
+
+        container.innerHTML = window.mockBarbers.map(b => {
+            const isAtivo = b.ativo !== false; // Se não tiver a propriedade, considera true
+            const badge = isAtivo ? '<span class="badge bg-success ms-2" style="font-size:0.65rem;">Ativo</span>' : '<span class="badge bg-secondary ms-2" style="font-size:0.65rem;">Inativo</span>';
+            const opacity = isAtivo ? '' : 'opacity-50';
+
+            return `
+            <div class="admin-item ${opacity}">
+                <div style="flex:1">
+                    <div class="admin-item-name">${b.name} ${badge}</div>
+                    <div class="admin-item-meta"><i class="bi bi-clock"></i> ${b.escalaInicio} – ${b.escalaFim}</div>
+                    <div class="mt-1">${(b.tags || "").split(",").map(t=>`<span class="badge-tag">${t.trim()}</span>`).join("")}</div>
+                </div>
+                <div class="admin-item-actions">
+                    <button class="btn-icon" onclick="window.alternarStatusBarbeiro('${b.id}', ${isAtivo})" title="${isAtivo ? 'Desativar' : 'Ativar'}"><i class="bi ${isAtivo ? 'bi-eye-slash' : 'bi-eye'}"></i></button>
+                    <button class="btn-icon" onclick="window.abrirModalBarbeiro('${b.id}')" title="Editar"><i class="bi bi-pencil"></i></button>
+                    <button class="btn-icon" onclick="window.abrirModalEscala('${b.id}')" title="Escala"><i class="bi bi-calendar"></i></button>
+                </div>
+            </div>`;
+        }).join("");
+    } catch (error) { container.innerHTML = '<p class="text-danger text-center">Erro ao carregar equipa.</p>'; }
+};
+
+window.renderizarServicosAdmin = async () => {
+    const container = document.getElementById("lista-servicos-admin");
+    container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm text-primary"></span> Carregando serviços...</div>';
+
+    try {
+        const querySnapshot = await window.getDocs(window.collection(window.db, "servicos"));
+        window.mockServices = [];
+        querySnapshot.forEach((doc) => { window.mockServices.push({ id: doc.id, ...doc.data() }); });
+
+        if (window.mockServices.length === 0) return container.innerHTML = '<p class="text-muted text-center mt-3">Nenhum serviço cadastrado.</p>';
+
+        container.innerHTML = window.mockServices.map(s => {
+            const isAtivo = s.ativo !== false;
+            const badge = isAtivo ? '<span class="badge bg-success ms-2" style="font-size:0.65rem;">Ativo</span>' : '<span class="badge bg-secondary ms-2" style="font-size:0.65rem;">Inativo</span>';
+            const opacity = isAtivo ? '' : 'opacity-50';
+
+            return `
+            <div class="admin-item ${opacity}">
+                <div style="flex:1">
+                    <div class="admin-item-name">${s.name} ${badge}</div>
+                    <div class="admin-item-desc">R$ ${Number(s.price).toFixed(2)} &bull; ${s.duration}min</div>
+                </div>
+                <div class="admin-item-actions">
+                    <button class="btn-icon" onclick="window.alternarStatusServico('${s.id}', ${isAtivo})" title="${isAtivo ? 'Desativar' : 'Ativar'}"><i class="bi ${isAtivo ? 'bi-eye-slash' : 'bi-eye'}"></i></button>
+                    <button class="btn-icon" onclick="window.abrirModalServico('${s.id}')" title="Editar"><i class="bi bi-pencil"></i></button>
+                </div>
+            </div>`;
+        }).join("");
+    } catch (error) { container.innerHTML = '<p class="text-danger text-center">Erro ao carregar serviços.</p>'; }
+};
+
 /* ============================================================
-   MÓDULO ADMIN — EXTRAS (FINANCEIRO E ENDEREÇO)
+   FUNÇÕES DE ATIVAR / DESATIVAR NO FIREBASE
+   ============================================================ */
+window.alternarStatusBarbeiro = async (id, statusAtual) => {
+    try {
+        await window.updateDoc(window.doc(window.db, "profissionais", id), { ativo: !statusAtual });
+        window.renderizarEquipa();
+    } catch (e) { alert("Erro ao alterar status."); }
+};
+
+window.alternarStatusServico = async (id, statusAtual) => {
+    try {
+        await window.updateDoc(window.doc(window.db, "servicos", id), { ativo: !statusAtual });
+        window.renderizarServicosAdmin();
+    } catch (e) { alert("Erro ao alterar status."); }
+};
+
+/* ============================================================
+   2. CRIAÇÃO E EDIÇÃO (Com injeção da propriedade 'ativo')
+   ============================================================ */
+window.salvarBarbeiro = async () => {
+    const nome = document.getElementById("barbeiro-nome").value.trim(), senha = document.getElementById("barbeiro-senha").value;
+    const tags = document.getElementById("barbeiro-tags").value.trim(), ini = document.getElementById("barbeiro-horario-inicio").value, fim = document.getElementById("barbeiro-horario-fim").value;
+    const file = document.getElementById("barbeiro-imagem").files[0];
+    if (!nome||!senha||!tags||!ini||!fim) return alert("Preencha todos os campos obrigatórios");
+    
+    const btn = document.querySelector("#modalBarbeiro .btn-primary");
+    const textoOriginal = btn.innerHTML; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; btn.disabled = true;
+
+    try {
+        let imgUrl = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80";
+        if (file) imgUrl = await window.converterBase64(file);
+        else if (window.appState.editingId) { const b = window.mockBarbers.find(x => x.id === window.appState.editingId); if (b && b.img) imgUrl = b.img; }
+
+        const dados = { name:nome, password:senha, tags, escalaInicio:ini, escalaFim:fim, img:imgUrl };
+        if (window.appState.editingId) await window.updateDoc(window.doc(window.db, "profissionais", window.appState.editingId), dados);
+        else { dados.ativo = true; await window.addDoc(window.collection(window.db, "profissionais"), dados); }
+        
+        bootstrap.Modal.getInstance(document.getElementById("modalBarbeiro")).hide();
+        await window.renderizarEquipa();
+    } catch (e) { alert("Erro ao comunicar com a base de dados."); } finally { btn.innerHTML = textoOriginal; btn.disabled = false; }
+};
+
+window.salvarServico = async () => {
+    const nome = document.getElementById("servico-nome").value.trim(), preco = parseFloat(document.getElementById("servico-preco").value);
+    const dur = parseInt(document.getElementById("servico-duracao").value), file = document.getElementById("servico-imagem").files[0];
+    if (!nome||isNaN(preco)||isNaN(dur)) return alert("Preencha todos os campos corretamente");
+    
+    const btn = document.querySelector("#modalServico .btn-primary");
+    const textoOriginal = btn.innerHTML; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; btn.disabled = true;
+
+    try {
+        let imgUrl = "https://images.unsplash.com/photo-1599351431202-924373aed4ab?auto=format&fit=crop&w=200&q=80";
+        if (file) imgUrl = await window.converterBase64(file);
+        else if (window.appState.editingId) { const s = window.mockServices.find(x => x.id === window.appState.editingId); if (s && s.img) imgUrl = s.img; }
+
+        const dados = { name:nome, price:preco, duration:dur, img:imgUrl };
+        if (window.appState.editingId) await window.updateDoc(window.doc(window.db, "servicos", window.appState.editingId), dados);
+        else { dados.ativo = true; await window.addDoc(window.collection(window.db, "servicos"), dados); }
+        
+        bootstrap.Modal.getInstance(document.getElementById("modalServico")).hide();
+        await window.renderizarServicosAdmin(); 
+    } catch (e) { alert("Erro ao comunicar com a base de dados."); } finally { btn.innerHTML = textoOriginal; btn.disabled = false; }
+};
+
+/* ============================================================
+   3. CRIAÇÃO E EDIÇÃO (CREATE / UPDATE) - SERVIÇOS
+   ============================================================ */
+window.abrirModalServico = (id = null) => {
+    window.appState.editingId = id;
+    
+    document.getElementById("servico-nome").value = "";
+    document.getElementById("servico-preco").value = "";
+    document.getElementById("servico-duracao").value = "";
+    document.getElementById("servico-imagem").value = "";
+    
+    document.getElementById("modalServicoTitle").textContent = id ? "Editar Serviço" : "Novo Serviço";
+    
+    if (id) {
+        const s = window.mockServices.find(x => x.id === id);
+        if (s) {
+            document.getElementById("servico-nome").value = s.name;
+            document.getElementById("servico-preco").value = s.price;
+            document.getElementById("servico-duracao").value = s.duration;
+        }
+    }
+    new bootstrap.Modal(document.getElementById("modalServico")).show();
+};
+
+window.salvarServico = async () => {
+    const nome  = document.getElementById("servico-nome").value.trim();
+    const preco = parseFloat(document.getElementById("servico-preco").value);
+    const dur   = parseInt(document.getElementById("servico-duracao").value);
+    const file  = document.getElementById("servico-imagem").files[0];
+    
+    if (!nome||isNaN(preco)||isNaN(dur)) { alert("Preencha todos os campos corretamente"); return; }
+    
+    const btn = document.querySelector("#modalServico .btn-primary");
+    const textoOriginal = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+    btn.disabled = true;
+
+    try {
+        let imgUrl = "https://images.unsplash.com/photo-1599351431202-924373aed4ab?auto=format&fit=crop&w=200&q=80";
+        if (file) {
+            imgUrl = await window.converterBase64(file);
+        } else if (window.appState.editingId) {
+            const s = window.mockServices.find(x => x.id === window.appState.editingId);
+            if (s && s.img) imgUrl = s.img;
+        }
+
+        const dados = { name:nome, price:preco, duration:dur, img:imgUrl };
+        
+        if (window.appState.editingId) {
+            await window.updateDoc(window.doc(window.db, "servicos", window.appState.editingId), dados);
+        } else {
+            await window.addDoc(window.collection(window.db, "servicos"), dados);
+        }
+        
+        bootstrap.Modal.getInstance(document.getElementById("modalServico")).hide();
+        await window.renderizarServicosAdmin(); 
+        
+    } catch (e) {
+        console.error("Erro ao salvar:", e);
+        alert("Erro ao comunicar com a base de dados.");
+    } finally {
+        btn.innerHTML = textoOriginal;
+        btn.disabled = false;
+    }
+};
+
+/* ============================================================
+   4. ATUALIZAÇÃO RÁPIDA (ESCALA)
+   ============================================================ */
+window.abrirModalEscala = (id) => {
+    window.appState.editingId = id;
+    const b = window.mockBarbers.find(x => x.id === id);
+    if (b) {
+        document.getElementById("escala-barbeiro-nome").textContent = `Profissional: ${b.name}`;
+        document.getElementById("escala-hora-inicio").value = b.escalaInicio;
+        document.getElementById("escala-hora-fim").value = b.escalaFim;
+    }
+    new bootstrap.Modal(document.getElementById("modalEscala")).show();
+};
+
+window.salvarEscala = async () => {
+    const ini = document.getElementById("escala-hora-inicio").value;
+    const fim = document.getElementById("escala-hora-fim").value;
+    
+    if (!ini||!fim) { alert("Preencha os horários"); return; }
+    
+    const btn = document.querySelector("#modalEscala .btn-primary");
+    const textoOriginal = btn.innerHTML;
+    btn.innerHTML = "Salvando..."; btn.disabled = true;
+
+    try {
+        // Atualiza apenas os campos da escala diretamente no documento específico
+        await window.updateDoc(window.doc(window.db, "profissionais", window.appState.editingId), {
+            escalaInicio: ini,
+            escalaFim: fim
+        });
+        
+        bootstrap.Modal.getInstance(document.getElementById("modalEscala")).hide();
+        await window.renderizarEquipa();
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao atualizar escala.");
+    } finally {
+        btn.innerHTML = textoOriginal;
+        btn.disabled = false;
+    }
+};
+
+/* ============================================================
+   MÓDULO ADMIN — EXTRAS (FINANCEIRO E ENDEREÇO) - MANTIDOS INTACTOS
    ============================================================ */
 window.criarPainelAdminExtras = () => {
     const adminBody = document.querySelector("#view-admin .section-body");
@@ -15,7 +252,6 @@ window.criarPainelAdminExtras = () => {
             <div class="col-12 col-md-4">
               <label class="form-label" style="font-size: 0.85rem;">Dia</label>
               <input type="date" id="filtro-relatorio-dia" class="form-control" onchange="window.aplicarFiltroRelatorio()" />
-              <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 0.25rem;">Deixe vazio para todos os dias</small>
             </div>
             <div class="col-12 col-md-4">
               <label class="form-label" style="font-size: 0.85rem;">Mês</label>
@@ -29,9 +265,7 @@ window.criarPainelAdminExtras = () => {
             </div>
             <div class="col-12 col-md-4">
               <label class="form-label" style="font-size: 0.85rem;">Ano</label>
-              <select id="filtro-relatorio-ano" class="form-control" onchange="window.aplicarFiltroRelatorio()">
-                <option value="">Todos os anos</option>
-              </select>
+              <select id="filtro-relatorio-ano" class="form-control" onchange="window.aplicarFiltroRelatorio()"><option value="">Todos os anos</option></select>
             </div>
           </div>
           <div class="row g-3">
@@ -41,10 +275,6 @@ window.criarPainelAdminExtras = () => {
             <div class="col-6">
               <div class="stat-card"><div><p class="stat-label">Ganhos Mensais</p><div class="stat-value" id="ganho-mensal">R$ 0,00</div></div></div>
             </div>
-          </div>
-          <div class="row g-2 mt-4">
-            <div class="col-12 col-md-6"><button class="btn btn-primary w-100" onclick="window.gerarRelatórioMensal()"><i class="bi bi-file-earmark-pdf"></i> Gerar Relatório Mensal</button></div>
-            <div class="col-12 col-md-6"><button class="btn btn-primary w-100" onclick="window.gerarRelatórioAnual()"><i class="bi bi-file-earmark-pdf"></i> Gerar Relatório Anual</button></div>
           </div>
         </div>
         <div class="admin-section" id="admin-endereco-bloco">
@@ -66,8 +296,8 @@ window.criarPainelAdminExtras = () => {
                 <div class="modal-body">
                   <div class="mb-3"><label class="form-label">Rua</label><input type="text" id="endereco-rua" class="form-control" placeholder="Ex: Rua das Flores" required /></div>
                   <div class="row g-2">
-                    <div class="col-6"><label class="form-label">Número</label><input type="text" id="endereco-numero" class="form-control" placeholder="Ex: 120" required /></div>
-                    <div class="col-6"><label class="form-label">Bairro</label><input type="text" id="endereco-bairro" class="form-control" placeholder="Ex: Centro" required /></div>
+                    <div class="col-6"><label class="form-label">Número</label><input type="text" id="endereco-numero" class="form-control" required /></div>
+                    <div class="col-6"><label class="form-label">Bairro</label><input type="text" id="endereco-bairro" class="form-control" required /></div>
                   </div>
                 </div>
                 <div class="modal-footer"><button type="button" class="btn btn-outline" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" onclick="window.salvarEndereco()">Guardar</button></div>
@@ -131,8 +361,6 @@ window.abrirModalEndereco = (index = null) => {
     document.getElementById("endereco-rua").value = endereco?.rua || "";
     document.getElementById("endereco-numero").value = endereco?.numero || "";
     document.getElementById("endereco-bairro").value = endereco?.bairro || "";
-    
-    // TODO Membro da Equipe: Após migrar para o Firebase, usar a documentRef para carregar dados
     new bootstrap.Modal(document.getElementById("modalEndereco")).show();
 };
 
@@ -143,27 +371,22 @@ window.salvarEndereco = () => {
     if (!rua || !numero || !bairro) return alert("Por favor, preencha rua, número e bairro.");
     
     const endereco = { rua, numero, bairro };
-    
-    // TODO Membro da Equipe: Substituir por addDoc/updateDoc na collection "enderecos"
     if (typeof window.appState.editingEnderecoIndex === "number") {
         window.mockAddresses[window.appState.editingEnderecoIndex] = endereco;
     } else {
         window.mockAddresses.push(endereco);
     }
-
     window.salvarEnderecosStorage();
     window.renderizarEnderecos();
     bootstrap.Modal.getInstance(document.getElementById("modalEndereco")).hide();
 };
 
 window.removerEndereco = (index) => {
-    // TODO Membro da Equipe: Substituir por deleteDoc
     window.mockAddresses.splice(index, 1);
     window.salvarEnderecosStorage();
     window.renderizarEnderecos();
 };
 
-/* ---- FUNÇÕES DOS RELATÓRIOS ---- */
 window.popularAnosRelatorio = () => {
     const selectAno = document.getElementById("filtro-relatorio-ano");
     if (!selectAno) return;
@@ -179,139 +402,3 @@ window.popularAnosRelatorio = () => {
 window.gerarRelatórioMensal = () => alert("⏳ Relatório Mensal - Integração em desenvolvimento");
 window.gerarRelatórioAnual = () => alert("⏳ Relatório Anual - Integração em desenvolvimento");
 window.aplicarFiltroRelatorio = () => console.log("Filtro Aplicado");
-
-   window.renderizarEquipa = () => {
-    const container = document.getElementById("lista-equipa");
-    container.innerHTML = window.mockBarbers.map(b => `
-        <div class="admin-item">
-            <div style="flex:1">
-                <div class="admin-item-name">${b.name}</div>
-                <div class="admin-item-meta"><i class="bi bi-clock"></i> ${b.escalaInicio} – ${b.escalaFim}</div>
-                <div class="mt-1">${b.tags.split(",").map(t=>`<span class="badge-tag">${t.trim()}</span>`).join("")}</div>
-            </div>
-            <div class="admin-item-actions">
-                <button class="btn-icon" onclick="window.abrirModalBarbeiro(${b.id})" title="Editar"><i class="bi bi-pencil"></i></button>
-                <button class="btn-icon" onclick="window.abrirModalEscala(${b.id})" title="Escala"><i class="bi bi-calendar"></i></button>
-            </div>
-        </div>`).join("");
-};
-
-window.renderizarServicosAdmin = () => {
-    document.getElementById("lista-servicos-admin").innerHTML = window.mockServices.map(s => `
-        <div class="admin-item">
-            <div style="flex:1">
-                <div class="admin-item-name">${s.name}</div>
-                <div class="admin-item-desc">R$ ${s.price} &bull; ${s.duration}min</div>
-            </div>
-            <div class="admin-item-actions">
-                <button class="btn-icon" onclick="window.abrirModalServico(${s.id})" title="Editar"><i class="bi bi-pencil"></i></button>
-            </div>
-        </div>`).join("");
-};
-
-/* --- Funções do Profissional --- */
-window.abrirModalBarbeiro = (id = null) => {
-    window.appState.editingId = id;
-    document.getElementById("form-barbeiro-admin")?.reset();
-    document.getElementById("modalBarbeiroTitle").textContent = id ? "Editar Profissional" : "Novo Profissional";
-    
-    if (id) {
-        const b = window.mockBarbers.find(x => x.id === id);
-        if (b) {
-            document.getElementById("barbeiro-nome").value = b.name;
-            document.getElementById("barbeiro-senha").value = b.password;
-            document.getElementById("barbeiro-tags").value = b.tags;
-            document.getElementById("barbeiro-horario-inicio").value = b.escalaInicio;
-            document.getElementById("barbeiro-horario-fim").value = b.escalaFim;
-        }
-    }
-    new bootstrap.Modal(document.getElementById("modalBarbeiro")).show();
-};
-
-window.salvarBarbeiro = async () => {
-    const nome  = document.getElementById("barbeiro-nome").value.trim();
-    const senha = document.getElementById("barbeiro-senha").value;
-    const tags  = document.getElementById("barbeiro-tags").value.trim();
-    const ini   = document.getElementById("barbeiro-horario-inicio").value;
-    const fim   = document.getElementById("barbeiro-horario-fim").value;
-    const file  = document.getElementById("barbeiro-imagem").files[0];
-    
-    if (!nome||!senha||!tags||!ini||!fim) { alert("Preencha todos os campos obrigatórios"); return; }
-    
-    const img = file ? await window.converterBase64(file) : "https://via.placeholder.com/200";
-    const dados = { name:nome, password:senha, tags, escalaInicio:ini, escalaFim:fim, img };
-    
-    // TODO Membro da Equipe: Substituir este mock por addDoc/updateDoc na collection "profissionais"
-    if (window.appState.editingId) {
-        const i = window.mockBarbers.findIndex(b => b.id === window.appState.editingId);
-        if (i>-1) window.mockBarbers[i] = {...window.mockBarbers[i], ...dados};
-    } else {
-        window.mockBarbers.push({ id: Math.max(...window.mockBarbers.map(b=>b.id),0)+1, ...dados });
-    }
-    bootstrap.Modal.getInstance(document.getElementById("modalBarbeiro")).hide();
-    window.renderizarEquipa();
-};
-
-/* --- Funções de Serviço --- */
-window.abrirModalServico = (id = null) => {
-    window.appState.editingId = id;
-    document.getElementById("form-servico-admin")?.reset();
-    document.getElementById("modalServicoTitle").textContent = id ? "Editar Serviço" : "Novo Serviço";
-    
-    if (id) {
-        const s = window.mockServices.find(x => x.id === id);
-        if (s) {
-            document.getElementById("servico-nome").value = s.name;
-            document.getElementById("servico-preco").value = s.price;
-            document.getElementById("servico-duracao").value = s.duration;
-        }
-    }
-    new bootstrap.Modal(document.getElementById("modalServico")).show();
-};
-
-window.salvarServico = async () => {
-    const nome  = document.getElementById("servico-nome").value.trim();
-    const preco = parseFloat(document.getElementById("servico-preco").value);
-    const dur   = parseInt(document.getElementById("servico-duracao").value);
-    const file  = document.getElementById("servico-imagem").files[0];
-    
-    if (!nome||isNaN(preco)||isNaN(dur)) { alert("Preencha todos os campos corretamente"); return; }
-    
-    const img = file ? await window.converterBase64(file) : "https://via.placeholder.com/200";
-    const dados = { name:nome, price:preco, duration:dur, img };
-    
-    // TODO Membro da Equipe: Substituir por addDoc/updateDoc na collection "servicos"
-    if (window.appState.editingId) {
-        const i = window.mockServices.findIndex(s => s.id === window.appState.editingId);
-        if (i>-1) window.mockServices[i] = {...window.mockServices[i], ...dados};
-    } else {
-        window.mockServices.push({ id: Math.max(...window.mockServices.map(s=>s.id),0)+1, ...dados });
-    }
-    bootstrap.Modal.getInstance(document.getElementById("modalServico")).hide();
-    window.renderizarServicosAdmin();
-};
-
-/* --- Funções de Escala --- */
-window.abrirModalEscala = (id) => {
-    window.appState.editingId = id;
-    const b = window.mockBarbers.find(x => x.id === id);
-    if (b) {
-        document.getElementById("escala-barbeiro-nome").textContent = `Profissional: ${b.name}`;
-        document.getElementById("escala-hora-inicio").value = b.escalaInicio;
-        document.getElementById("escala-hora-fim").value = b.escalaFim;
-    }
-    new bootstrap.Modal(document.getElementById("modalEscala")).show();
-};
-
-window.salvarEscala = () => {
-    const ini = document.getElementById("escala-hora-inicio").value;
-    const fim = document.getElementById("escala-hora-fim").value;
-    
-    if (!ini||!fim) { alert("Preencha os horários"); return; }
-    
-    const b = window.mockBarbers.find(x => x.id === window.appState.editingId);
-    if (b) { b.escalaInicio = ini; b.escalaFim = fim; }
-    
-    bootstrap.Modal.getInstance(document.getElementById("modalEscala")).hide();
-    window.renderizarEquipa();
-};

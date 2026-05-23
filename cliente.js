@@ -13,9 +13,12 @@ window.iniciarAgendamento = () => {
 };
 
 window.renderizarServicos = () => {
-    document.getElementById("lista-servicos").innerHTML = window.mockServices.map(s => `
+    // Filtra os serviços que têm o ativo falso
+    const servicosAtivos = window.mockServices.filter(s => s.ativo !== false);
+    
+    document.getElementById("lista-servicos").innerHTML = servicosAtivos.map(s => `
         <div class="col-6 col-md-4 mb-3">
-            <div class="service-card" onclick="window.selecionarServico(${s.id}, event)">
+            <div class="service-card" onclick="window.selecionarServico('${s.id}', event)">
                 <img src="${s.img}" class="service-icon" alt="${s.name}" onerror="this.style.display='none'">
                 <h6>${s.name}</h6>
                 <p class="price">R$ ${s.price}</p>
@@ -36,9 +39,12 @@ window.selecionarServico = (id, evt) => {
 };
 
 window.renderizarBarbeiros = () => {
-    document.getElementById("lista-barbeiros").innerHTML = window.mockBarbers.map(b => `
+    // Filtra os profissionais que têm o ativo falso
+    const barbeirosAtivos = window.mockBarbers.filter(b => b.ativo !== false);
+    
+    document.getElementById("lista-barbeiros").innerHTML = barbeirosAtivos.map(b => `
         <div class="col-6 col-md-4">
-            <div class="barbeiro-card" onclick="window.selecionarBarbeiro(${b.id}, event)">
+            <div class="barbeiro-card" onclick="window.selecionarBarbeiro('${b.id}', event)">
                 <img src="${b.img}" class="barbeiro-img" alt="${b.name}" onerror="this.textContent='👤'">
                 <h6>${b.name}</h6>
                 <p class="tags">${b.tags}</p>
