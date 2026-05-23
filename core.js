@@ -27,6 +27,7 @@ window.addDoc = addDoc;
 window.getDocs = getDocs;
 window.updateDoc = updateDoc;
 window.doc = doc;
+window.deleteDoc = deleteDoc;
 
 /* ---- ESTADO GLOBAL E MOCKS (Até o grupo plugar o Firestore) ---- */
 window.appState = {
@@ -62,7 +63,11 @@ window.salvarEnderecosStorage = () => {
 window.getEnderecoAtivo = () => window.mockAddresses.length ? window.mockAddresses[0] : null;
 
 window.formatarMoeda = (value) => {
-    return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(value).replace("€", "R$");
+    // Usando pt-BR e BRL, o JavaScript formata perfeitamente como "R$ 10,00"
+    return new Intl.NumberFormat("pt-BR", { 
+        style: "currency", 
+        currency: "BRL" 
+    }).format(value);
 };
 
 /* ---- NAVEGAÇÃO E AUTENTICAÇÃO ---- */
@@ -76,6 +81,20 @@ window.mudarTela = (idTela) => {
     if (navBtn) navBtn.classList.add("active");
 
     // Aciona as funções de cada módulo, se já estiverem carregadas
+    
+    // Rota do Cliente
+    if (idTela === "view-cliente") { 
+        if (window.renderizarServicos) window.renderizarServicos(); 
+        if (window.resetarWizard) window.resetarWizard(); 
+        if (window.renderizarEnderecos) window.renderizarEnderecos(); // Puxa o endereço para o resumo
+    }
+    
+    // Rota do Barbeiro
+    if (idTela === "view-barbeiro") { 
+        if (window.renderizarAgendaBarbeiro) window.renderizarAgendaBarbeiro(); 
+    }
+    
+    // Rota do Administrador
     if (idTela === "view-admin") { 
         if(window.criarPainelAdminExtras) window.criarPainelAdminExtras(); 
         if(window.renderizarAdminFinanceiro) window.renderizarAdminFinanceiro(); 
