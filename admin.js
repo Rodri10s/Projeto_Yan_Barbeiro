@@ -241,6 +241,9 @@ window.salvarEscala = async () => {
 /* ============================================================
    MÓDULO ADMIN — EXTRAS (FINANCEIRO E ENDEREÇO) - MANTIDOS INTACTOS
    ============================================================ */
+/* ============================================================
+   MÓDULO ADMIN — EXTRAS (FINANCEIRO E ENDEREÇO ÚNICO)
+   ============================================================ */
 window.criarPainelAdminExtras = () => {
     const adminBody = document.querySelector("#view-admin .section-body");
     if (!adminBody || document.getElementById("admin-financeiro-bloco")) return;
@@ -279,8 +282,8 @@ window.criarPainelAdminExtras = () => {
         </div>
         <div class="admin-section" id="admin-endereco-bloco">
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <p class="admin-section-title mb-0"><i class="bi bi-geo-alt"></i> Endereços</p>
-            <button class="btn btn-accent btn-sm" onclick="window.abrirModalEndereco()"><i class="bi bi-plus-circle"></i> Novo</button>
+            <p class="admin-section-title mb-0"><i class="bi bi-geo-alt"></i> Endereço da Barbearia</p>
+            <button id="btn-novo-endereco" class="btn btn-accent btn-sm" onclick="window.abrirModalEndereco()" style="display:none;"><i class="bi bi-plus-circle"></i> Cadastrar</button>
           </div>
           <div class="admin-list" id="lista-enderecos"></div>
         </div>
@@ -292,7 +295,7 @@ window.criarPainelAdminExtras = () => {
           <div class="modal fade" id="modalEndereco" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
               <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title" id="modalEnderecoTitle">Novo Endereço</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header"><h5 class="modal-title" id="modalEnderecoTitle">Endereço</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
                   <div class="mb-3"><label class="form-label">Rua</label><input type="text" id="endereco-rua" class="form-control" placeholder="Ex: Rua das Flores" required /></div>
                   <div class="row g-2">
@@ -308,6 +311,98 @@ window.criarPainelAdminExtras = () => {
         document.body.insertAdjacentHTML("beforeend", modalHTML);
     }
 };
+
+window.renderizarEnderecos = async () => {
+    const container = document.getElementById("lista-enderecos");
+    const btnNovo = document.getElementById("btn-novo-endereco");
+    if (!container) return;
+    
+    container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm text-primary"></span> Carregando endereço...</div>';
+
+    try {
+        const querySnapshot = await window.getDocs(window.collection(window.db, "enderecos"));
+        window.mockAddresses = [];
+        
+        querySnapshot.forEach((doc) => {
+            window.mockAddresses.push({ id: doc.id, ...doc.data() });
+        });
+
+        // LÓGICA DE TRAVA: Se não tem endereço, mostra o botão "Cadastrar". Se já tem, esconde.
+        if (btnNovo) {
+            btnNovo.style.display = window.mockAddresses.length === 0 ? "block" : "none";
+        }
+
+        if (window.mockAddresses.length === 0) {
+            container.innerHTML = `<div class="empty-state"><i class="bi bi-geo-alt"></i><p>Nenhum endereço cadastrado. Clique em 'Cadastrar' para adicionar.</p></div>`;
+            return;
+        }
+
+        // Bloqueia a lista: pega sempre o índice [0] (o único endereço) e gera o HTML sem o botão de lixeira
+        const endereco = window.mockAddresses[0];
+
+        container.innerHTML = `
+            <div class="admin-item">
+              <div style="flex:1">
+                <div class="admin-item-name">${endereco.rua}, ${endereco.numero}</div>
+                <div class="admin-item-desc">${endereco.bairro}</div>
+              </div>
+              <div class="admin-item-actions">
+                <button class="btn-icon" onclick="window.abrirModalEndereco('${endereco.id}')" title="Editar Endereço"><i class="bi bi-pencil"></i></button>
+              </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error("Erro ao buscar endereços:", error);
+        container.innerHTML = '<p class="text-danger text-center">Erro ao carregar endereço.</p>';
+    }
+};
+
+window.abrirModalEndereco = (id = null) => {
+    window.appState.editingEnderecoId = id; 
+    const endereco = id ? window.mockAddresses.find(x => x.id === id) : null;
+    
+    document.getElementById("modalEnderecoTitle").textContent = endereco ? "Editar Endereço" : "Cadastrar Endereço";
+    document.getElementById("endereco-rua").value = endereco?.rua || "";
+    document.getElementById("endereco-numero").value = endereco?.numero || "";
+    document.getElementById("endereco-bairro").value = endereco?.bairro || "";
+    
+    new bootstrap.Modal(document.getElementById("modalEndereco")).show();
+};
+
+window.salvarEndereco = async () => {
+    const rua = document.getElementById("endereco-rua").value.trim();
+    const numero = document.getElementById("endereco-numero").value.trim();
+    const bairro = document.getElementById("endereco-bairro").value.trim();
+    if (!rua || !numero || !bairro) return alert("Por favor, preencha rua, número e bairro.");
+    
+    const btn = document.querySelector("#modalEndereco .btn-primary");
+    const textoOriginal = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+    btn.disabled = true;
+
+    try {
+        const dados = { rua, numero, bairro };
+        
+        if (window.appState.editingEnderecoId) {
+            // Atualiza o único endereço existente
+            await window.updateDoc(window.doc(window.db, "enderecos", window.appState.editingEnderecoId), dados);
+        } else {
+            // Cria pela primeira (e única) vez
+            await window.addDoc(window.collection(window.db, "enderecos"), dados);
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById("modalEndereco")).hide();
+        await window.renderizarEnderecos(); 
+    } catch (e) {
+        console.error("Erro ao salvar endereço:", e);
+        alert("Erro ao comunicar com a base de dados.");
+    } finally {
+        btn.innerHTML = textoOriginal;
+        btn.disabled = false;
+    }
+};
+
+/* --- MANTENHA AS FUNÇÕES DE RELATÓRIO AQUI ABAIXO (calcularValoresFinanceiros, popularAnosRelatorio, etc) --- */
 
 window.calcularValoresFinanceiros = () => {
     const agora = new Date();
@@ -336,55 +431,99 @@ window.renderizarAdminFinanceiro = () => {
     ganhoMensal.textContent = window.formatarMoeda(monthTotal);
 };
 
-window.renderizarEnderecos = () => {
+/* ============================================================
+   FUNÇÕES DE ENDEREÇO ÚNICO CONECTADAS AO FIREBASE
+   ============================================================ */
+window.renderizarEnderecos = async () => {
     const container = document.getElementById("lista-enderecos");
+    const btnNovo = document.getElementById("btn-novo-endereco");
     if (!container) return;
-    if (!window.mockAddresses.length) {
-        container.innerHTML = `<div class="empty-state"><i class="bi bi-geo-alt"></i><p>Nenhum endereço cadastrado</p></div>`;
-        return;
+    
+    container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm text-primary"></span> Carregando endereço...</div>';
+
+    try {
+        // Busca os endereços reais salvos no Firebase
+        const querySnapshot = await window.getDocs(window.collection(window.db, "enderecos"));
+        window.mockAddresses = [];
+        
+        querySnapshot.forEach((doc) => {
+            window.mockAddresses.push({ id: doc.id, ...doc.data() });
+        });
+
+        // TRAVA DE SEGURANÇA: Mostra o botão "Cadastrar" apenas se não houver nenhum endereço no banco
+        if (btnNovo) {
+            btnNovo.style.display = window.mockAddresses.length === 0 ? "block" : "none";
+        }
+
+        // Se estiver vazio
+        if (window.mockAddresses.length === 0) {
+            container.innerHTML = `<div class="empty-state"><i class="bi bi-geo-alt"></i><p>Nenhum endereço cadastrado. Clique em 'Cadastrar' para adicionar.</p></div>`;
+            return;
+        }
+
+        // Bloqueia a lista: pega sempre o primeiro endereço e gera o HTML sem o botão de excluir
+        const endereco = window.mockAddresses[0];
+
+        container.innerHTML = `
+            <div class="admin-item">
+              <div style="flex:1">
+                <div class="admin-item-name">${endereco.rua}, ${endereco.numero}</div>
+                <div class="admin-item-desc">${endereco.bairro}</div>
+              </div>
+              <div class="admin-item-actions">
+                <button class="btn-icon" onclick="window.abrirModalEndereco('${endereco.id}')" title="Editar Endereço"><i class="bi bi-pencil"></i></button>
+              </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error("Erro ao buscar endereços:", error);
+        container.innerHTML = '<p class="text-danger text-center">Erro ao carregar endereço.</p>';
     }
-    container.innerHTML = window.mockAddresses.map((endereco, index) => `
-        <div class="admin-item">
-          <div style="flex:1"><div class="admin-item-name">${endereco.rua}, ${endereco.numero}</div><div class="admin-item-desc">${endereco.bairro}</div></div>
-          <div class="admin-item-actions">
-            <button class="btn-icon" onclick="window.abrirModalEndereco(${index})" title="Editar"><i class="bi bi-pencil"></i></button>
-            <button class="btn-icon" onclick="window.removerEndereco(${index})" title="Remover"><i class="bi bi-trash"></i></button>
-          </div>
-        </div>
-    `).join("");
 };
 
-window.abrirModalEndereco = (index = null) => {
-    window.appState.editingEnderecoIndex = index;
-    const endereco = typeof index === "number" ? window.mockAddresses[index] : null;
-    document.getElementById("modalEnderecoTitle").textContent = endereco ? "Editar Endereço" : "Novo Endereço";
+window.abrirModalEndereco = (id = null) => {
+    window.appState.editingEnderecoId = id; 
+    const endereco = id ? window.mockAddresses.find(x => x.id === id) : null;
+    
+    document.getElementById("modalEnderecoTitle").textContent = endereco ? "Editar Endereço" : "Cadastrar Endereço";
     document.getElementById("endereco-rua").value = endereco?.rua || "";
     document.getElementById("endereco-numero").value = endereco?.numero || "";
     document.getElementById("endereco-bairro").value = endereco?.bairro || "";
+    
     new bootstrap.Modal(document.getElementById("modalEndereco")).show();
 };
 
-window.salvarEndereco = () => {
+window.salvarEndereco = async () => {
     const rua = document.getElementById("endereco-rua").value.trim();
     const numero = document.getElementById("endereco-numero").value.trim();
     const bairro = document.getElementById("endereco-bairro").value.trim();
     if (!rua || !numero || !bairro) return alert("Por favor, preencha rua, número e bairro.");
     
-    const endereco = { rua, numero, bairro };
-    if (typeof window.appState.editingEnderecoIndex === "number") {
-        window.mockAddresses[window.appState.editingEnderecoIndex] = endereco;
-    } else {
-        window.mockAddresses.push(endereco);
-    }
-    window.salvarEnderecosStorage();
-    window.renderizarEnderecos();
-    bootstrap.Modal.getInstance(document.getElementById("modalEndereco")).hide();
-};
+    const btn = document.querySelector("#modalEndereco .btn-primary");
+    const textoOriginal = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+    btn.disabled = true;
 
-window.removerEndereco = (index) => {
-    window.mockAddresses.splice(index, 1);
-    window.salvarEnderecosStorage();
-    window.renderizarEnderecos();
+    try {
+        const dados = { rua, numero, bairro };
+        
+        if (window.appState.editingEnderecoId) {
+            // Atualiza o único endereço existente no Firebase
+            await window.updateDoc(window.doc(window.db, "enderecos", window.appState.editingEnderecoId), dados);
+        } else {
+            // Cria o endereço pela primeira e única vez no Firebase
+            await window.addDoc(window.collection(window.db, "enderecos"), dados);
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById("modalEndereco")).hide();
+        await window.renderizarEnderecos(); 
+    } catch (e) {
+        console.error("Erro ao salvar endereço:", e);
+        alert("Erro ao comunicar com a base de dados.");
+    } finally {
+        btn.innerHTML = textoOriginal;
+        btn.disabled = false;
+    }
 };
 
 window.popularAnosRelatorio = () => {
