@@ -63,7 +63,11 @@ window.salvarEnderecosStorage = () => {
 window.getEnderecoAtivo = () => window.mockAddresses.length ? window.mockAddresses[0] : null;
 
 window.formatarMoeda = (value) => {
-    return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(value).replace("€", "R$");
+    // Usando pt-BR e BRL, o JavaScript formata perfeitamente como "R$ 10,00"
+    return new Intl.NumberFormat("pt-BR", { 
+        style: "currency", 
+        currency: "BRL" 
+    }).format(value);
 };
 
 /* ---- NAVEGAÇÃO E AUTENTICAÇÃO ---- */
