@@ -294,28 +294,46 @@ const _entrarStepHorario = () => {
 };
 
 /* ── STEP 4 — resumo ──────────────────────────────────────── */
-window.atualizarResumo = () => {
+window.atualizarResumo = async () => {
     const ag = window.appState.agendamento;
     document.getElementById("resumo-servico").textContent  = ag.servicoNome || "-";
     document.getElementById("resumo-barbeiro").textContent = ag.barbeiroNome || "-";
-    document.getElementById("resumo-horario").textContent  = ag.horario
-        ? `${fmtData(ag.data)}, às ${ag.horario}` : "-";
-    document.getElementById("resumo-preco").textContent = ag.servico
-        ? `R$ ${Number(ag.servico.price).toFixed(2)}` : "-";
-    const end = window.getEnderecoAtivo();
-    const el  = document.getElementById("resumo-local");
-    if (el) el.textContent = end ? `${end.rua}, ${end.numero} — ${end.bairro}` : "-";
+    document.getElementById("resumo-horario").textContent  = ag.horario ? `${fmtData(ag.data)}, às ${ag.horario}` : "-";
+    document.getElementById("resumo-preco").textContent = ag.servico ? `R$ ${Number(ag.servico.price).toFixed(2)}` : "-";
+    
+    const el = document.getElementById("resumo-local");
+    if (el) el.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span> Buscando...';
+
+    try {
+        // Puxa o endereço DIRETAMENTE do banco de dados em tempo real
+        const snap = await getDocs(collection(db, "enderecos"));
+        if (!snap.empty) {
+            const end = snap.docs[0].data();
+            window.appState.enderecoAtivo = end; // Guarda na memória para o modal usar
+            if (el) el.textContent = `${end.rua}, ${end.numero} — ${end.bairro}`;
+        } else {
+            window.appState.enderecoAtivo = null;
+            if (el) el.textContent = "Endereço não cadastrado";
+        }
+    } catch (e) {
+        console.error("Erro ao buscar endereço:", e);
+        if (el) el.textContent = "Erro ao carregar local";
+    }
 };
 
 /* ── confirmação → Firestore ──────────────────────────────── */
 window.confirmarAgendamento = async () => {
     const ag  = window.appState.agendamento;
     const cli = window.appState.clienteAtual;
+    
     if (!ag.servicoId||!ag.barbeiroId||!ag.data||!ag.horario){
         alert("Por favor, complete todas as etapas antes de confirmar."); return;
     }
+    
     const btn  = document.getElementById("btn-confirmar-agendamento");
     const orig = btn.innerHTML;
+    
+    // Inicia a roleta de carregamento
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Confirmando...';
     btn.disabled  = true;
 
@@ -341,18 +359,27 @@ window.confirmarAgendamento = async () => {
     };
 
     try {
+        // Tenta gravar no Firebase
         const ref = await addDoc(collection(db,"agendamentos"), novoAg);
-        console.log("✅ Agendamento salvo:", ref.id);
-        window.mockBookings?.push({ id:ref.id, ...novoAg });
+        console.log("✅ Agendamento salvo com ID:", ref.id);
+        
+        if (window.mockBookings) window.mockBookings.push({ id:ref.id, ...novoAg });
 
-        ["cliente-nome","cliente-telefone","cliente-email"]
-            .forEach(id => document.getElementById(id).value="");
+        // Limpa os campos do formulário inicial
+        ["cliente-nome","cliente-telefone","cliente-email"].forEach(id => {
+            const input = document.getElementById(id);
+            if(input) input.value="";
+        });
 
-        window.abrirModalSucesso(novoAg, window.getEnderecoAtivo());
+        // Invoca a sua janela modal personalizada com o endereço correto
+        window.abrirModalSucesso(novoAg, window.appState.enderecoAtivo);
 
-    } catch(e){
+    } catch(e) {
         console.error("Erro ao salvar:", e);
-        alert("Erro ao confirmar agendamento.\n\n"+e.message);
+        // Se houver um bloqueio (seja da net ou do servidor), o cliente é avisado
+        alert("Erro na ligação ao servidor.\nVerifique a sua internet ou as Regras do Firestore.\nDetalhe: " + e.message);
+    } finally {
+        // O FINALLY GARANTE QUE O BOTÃO PARA DE GIRAR, QUER DÊ SUCESSO OU ERRO!
         btn.innerHTML = orig;
         btn.disabled  = false;
     }
