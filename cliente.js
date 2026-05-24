@@ -30,6 +30,18 @@ const addDiasISO = (iso, dias) => {
     d.setDate(d.getDate() + dias);
     return d.toISOString().split("T")[0];
 };
+
+// CORREÇÃO: A função que faltava para validar se o e-mail tem '@' e '.'
+const emailValido = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+// CORREÇÃO 2: A função que faltava para garantir que a data selecionada está dentro dos 30 dias permitidos
+const dataPermitida = (data) => {
+    return data >= hojeISO() && data <= addDiasISO(hojeISO(), 30);
+};
+
+/* ── máscara de telefone (xx) xxxxx-xxxx ──────────────────── */
 /* ── máscara de telefone (xx) xxxxx-xxxx ──────────────────── */
 const aplicarMascara = (input) => {
     input.addEventListener("input", () => {
@@ -440,6 +452,60 @@ window.resetarWizard = () => {
     if(hint){ hint.textContent="Selecione uma data para ver os horários disponíveis"; hint.className="cal-hint"; }
 };
 
+/* ── GERADOR DE CALENDÁRIO PERSONALIZADO (CHIPS) ──────────── */
+window.iniciarCalendario = () => {
+    const container = document.getElementById("date-chips");
+    if (!container) return;
+
+    let html = '';
+    const hoje = new Date();
+
+    // Gera os próximos 30 dias
+    for (let i = 0; i <= 30; i++) {
+        const dataAtual = new Date(hoje.getTime());
+        dataAtual.setDate(hoje.getDate() + i);
+
+        const dataISO = dataAtual.toISOString().split("T")[0];
+        const diaSemana = dataAtual.getDay(); // 0 = Domingo
+
+        const diasNome = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+        const mesesNome = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+
+        const nomeDia = diasNome[diaSemana];
+        const dia = String(dataAtual.getDate()).padStart(2, '0');
+        const mes = mesesNome[dataAtual.getMonth()];
+
+        // Se for domingo, a classe disabled deixa o botão cinza e impossível de clicar
+        const isDomingo = (diaSemana === 0) ? 'date-chip--disabled' : '';
+
+        html += `
+            <div class="date-chip ${isDomingo}" id="chip-${dataISO}" onclick="window.selecionarDataChip('${dataISO}')">
+                <span class="date-chip__dow">${nomeDia}</span>
+                <span class="date-chip__day">${dia}</span>
+                <span class="date-chip__mon">${mes}</span>
+            </div>
+        `;
+    }
+    container.innerHTML = html;
+};
+
+/* Ação ao clicar no dia */
+window.selecionarDataChip = (dataISO) => {
+    // Remove a cor azul de todos os dias
+    document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('date-chip--selected'));
+    
+    // Pinta o dia clicado de azul
+    const chipClicado = document.getElementById(`chip-${dataISO}`);
+    if (chipClicado) chipClicado.classList.add('date-chip--selected');
+
+    // Salva a data no input invisível e manda buscar os horários
+    const inp = document.getElementById("horario-data-input");
+    if (inp) {
+        inp.value = dataISO;
+        window.renderizarHorarios();
+    }
+};
+
 /* ── DOMContentLoaded ─────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
     const tel = document.getElementById("cliente-telefone");
@@ -448,6 +514,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const emailInput = document.getElementById("cliente-email");
     if (emailInput) aplicarValidacaoEmail(emailInput);
 
+    // CORREÇÃO: Dispara a função que desenha os botões de dia na tela
     window.iniciarCalendario();
 
     document.getElementById("btn-iniciar-agendamento").addEventListener("click", window.iniciarAgendamento);
