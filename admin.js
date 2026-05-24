@@ -16,6 +16,9 @@ window.renderizarEquipa = async () => {
         window.mockBarbers = []; 
         querySnapshot.forEach((doc) => { window.mockBarbers.push({ id: doc.id, ...doc.data() }); });
 
+        // NOVO: Assim que os barbeiros chegam do Firebase, atualiza a caixinha do relatório!
+        if (window.popularFiltroBarbeiros) window.popularFiltroBarbeiros();
+
         if (window.mockBarbers.length === 0) return container.innerHTML = '<p class="text-muted text-center mt-3">Nenhum profissional cadastrado.</p>';
 
         container.innerHTML = window.mockBarbers.map(b => {
@@ -36,7 +39,9 @@ window.renderizarEquipa = async () => {
                 </div>
             </div>`;
         }).join("");
-    } catch (error) { container.innerHTML = '<p class="text-danger text-center">Erro ao carregar equipa.</p>'; }
+    } catch (error) { 
+        container.innerHTML = '<p class="text-danger text-center">Erro ao carregar equipa.</p>'; 
+    }
 };
 
 window.renderizarServicosAdmin = async () => {
@@ -291,162 +296,225 @@ window.popularFiltroBarbeiros = () => {
     if (!select || !window.mockBarbers) return;
     select.innerHTML = '<option value="todos">Todos os Profissionais</option>' + window.mockBarbers.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
 };
+/* ============================================================
+   LÓGICA FINANCEIRA CONECTADA AO FIREBASE REAL
+   ============================================================ */
 
-window.gerarDadosFiccionaisFinanceiro = () => {
-    if (window.mockCompletedBookings && window.mockCompletedBookings.length > 0) return;
-    window.mockCompletedBookings = [];
-    const metodos = ["PIX", "Dinheiro", "Cartão de Débito", "Cartão de Crédito"];
-    const hoje = new Date();
-
-    for (let i = 0; i < 40; i++) {
-        const dataFake = new Date(hoje);
-        dataFake.setDate(hoje.getDate() - Math.floor(Math.random() * 30));
-        const barbeiroReal = (window.mockBarbers && window.mockBarbers.length > 0) ? window.mockBarbers[Math.floor(Math.random() * window.mockBarbers.length)] : { id: "1", name: "Yan" };
-        
-        window.mockCompletedBookings.push({
-            id: "mock_" + i,
-            barbeiroId: barbeiroReal.id,
-            price: [25, 30, 35, 50, 70][Math.floor(Math.random() * 5)],
-            metodoPagamento: metodos[Math.floor(Math.random() * metodos.length)],
-            completedAt: dataFake.toISOString()
-        });
-    }
-};
-
-window.calcularValoresFinanceiros = () => {
-    window.gerarDadosFiccionaisFinanceiro();
-    const agora = new Date(), seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000), comecoMes = new Date(agora.getFullYear(), agora.getMonth(), 1, 0, 0, 0, 0);
-    const weekTotal = window.mockCompletedBookings.reduce((acc, b) => { const d = new Date(b.completedAt || b.createdAt || agora); return d >= seteDiasAtras ? acc + b.price : acc; }, 0);
-    const monthTotal = window.mockCompletedBookings.reduce((acc, b) => { const d = new Date(b.completedAt || b.createdAt || agora); return d >= comecoMes ? acc + b.price : acc; }, 0);
-    return { weekTotal, monthTotal };
-};
-
-window.renderizarAdminFinanceiro = () => {
-    const ganhoSemanal = document.getElementById("ganho-semanal"), ganhoMensal = document.getElementById("ganho-mensal");
+window.renderizarAdminFinanceiro = async () => {
+    const ganhoSemanal = document.getElementById("ganho-semanal");
+    const ganhoMensal = document.getElementById("ganho-mensal");
     if (!ganhoSemanal || !ganhoMensal) return;
-    const { weekTotal, monthTotal } = window.calcularValoresFinanceiros();
-    ganhoSemanal.textContent = window.formatarMoeda ? window.formatarMoeda(weekTotal) : `R$ ${weekTotal}`;
-    ganhoMensal.textContent = window.formatarMoeda ? window.formatarMoeda(monthTotal) : `R$ ${monthTotal}`;
+
+    // Mostra o ícone a carregar enquanto vai buscar à nuvem
+    ganhoSemanal.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span>';
+    ganhoMensal.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span>';
+
+    try {
+        const snap = await window.getDocs(window.collection(window.db, "agendamentos"));
+        const agora = new Date();
+        const seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const comecoMes = new Date(agora.getFullYear(), agora.getMonth(), 1, 0, 0, 0, 0);
+
+        let weekTotal = 0, monthTotal = 0;
+
+        snap.forEach(doc => {
+            const b = doc.data();
+            // Puxa apenas se já foi CONCLUÍDO pelo barbeiro
+            if (b.completed) {
+                const d = new Date(b.completedAt || b.createdAt || agora);
+                const preco = Number(b.price) || 0;
+                if (d >= seteDiasAtras) weekTotal += preco;
+                if (d >= comecoMes) monthTotal += preco;
+            }
+        });
+
+        ganhoSemanal.textContent = window.formatarMoeda ? window.formatarMoeda(weekTotal) : `R$ ${weekTotal.toFixed(2)}`;
+        ganhoMensal.textContent = window.formatarMoeda ? window.formatarMoeda(monthTotal) : `R$ ${monthTotal.toFixed(2)}`;
+    } catch (error) {
+        console.error("Erro ao carregar valores financeiros:", error);
+        ganhoSemanal.textContent = "Erro";
+        ganhoMensal.textContent = "Erro";
+    }
 };
 
-window.abrirRelatorio = () => {
-    window.gerarDadosFiccionaisFinanceiro();
-    const periodo = document.getElementById("filtro-periodo").value, barbeiroId = document.getElementById("filtro-barbeiro-rel").value;
-    const dataInicioInput = document.getElementById("filtro-data-inicio").value, dataFimInput = document.getElementById("filtro-data-fim").value;
-    const agora = new Date(); let dataInicio, dataFim = agora;
+window.abrirRelatorio = async () => {
+    const btn = document.querySelector("#admin-financeiro-bloco .btn-primary");
+    const textoOrig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calculando...';
+    btn.disabled = true;
 
-    if (periodo === "hoje") dataInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-    else if (periodo === "semana") dataInicio = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
-    else if (periodo === "mes") dataInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
-    else if (periodo === "personalizado") {
-        if(!dataInicioInput || !dataFimInput) return alert("Preencha as datas.");
-        dataInicio = new Date(dataInicioInput + "T00:00:00"); dataFim = new Date(dataFimInput + "T23:59:59");
+    try {
+        const periodo = document.getElementById("filtro-periodo").value;
+        const barbeiroId = document.getElementById("filtro-barbeiro-rel").value;
+        const dataInicioInput = document.getElementById("filtro-data-inicio").value;
+        const dataFimInput = document.getElementById("filtro-data-fim").value;
+        const agora = new Date(); 
+        let dataInicio, dataFim = agora;
+
+        if (periodo === "hoje") dataInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+        else if (periodo === "semana") dataInicio = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
+        else if (periodo === "mes") dataInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+        else if (periodo === "personalizado") {
+            if(!dataInicioInput || !dataFimInput) {
+                alert("Preencha as datas inicial e final.");
+                btn.innerHTML = textoOrig; btn.disabled = false;
+                return;
+            }
+            dataInicio = new Date(dataInicioInput + "T00:00:00"); 
+            dataFim = new Date(dataFimInput + "T23:59:59");
+        }
+
+        const snap = await window.getDocs(window.collection(window.db, "agendamentos"));
+        let totalFaturado = 0; 
+        const pagamentos = { "PIX": 0, "Dinheiro": 0, "Cartão de Débito": 0, "Cartão de Crédito": 0 };
+        const barbeirosFaturamento = {};
+        let totalAtendimentos = 0;
+
+        snap.forEach(doc => {
+            const b = doc.data();
+            if (b.completed) {
+                const d = new Date(b.completedAt || b.createdAt);
+                if (d >= dataInicio && d <= dataFim && (barbeiroId === "todos" || String(b.barbeiroId) === String(barbeiroId))) {
+                    totalAtendimentos++;
+                    const preco = Number(b.price) || 0;
+                    totalFaturado += preco;
+                    
+                    if (b.metodoPagamento) {
+                        if(pagamentos[b.metodoPagamento] === undefined) pagamentos[b.metodoPagamento] = 0;
+                        pagamentos[b.metodoPagamento] += preco;
+                    }
+                    
+                    const bInfo = window.mockBarbers ? window.mockBarbers.find(x => String(x.id) === String(b.barbeiroId)) : null;
+                    const bNome = (bInfo ? bInfo.name : b.barbeiroNome) || "Desconhecido";
+                    
+                    if (!barbeirosFaturamento[bNome]) barbeirosFaturamento[bNome] = 0;
+                    barbeirosFaturamento[bNome] += preco;
+                }
+            }
+        });
+
+        const ticketMedio = totalAtendimentos > 0 ? (totalFaturado / totalAtendimentos) : 0;
+        const periodoTexto = periodo === "personalizado" ? `${new Date(dataInicioInput).toLocaleDateString('pt-BR')} a ${new Date(dataFimInput).toLocaleDateString('pt-BR')}` : document.getElementById("filtro-periodo").options[document.getElementById("filtro-periodo").selectedIndex].text;
+
+        // 1. SALVA OS DADOS NA MEMÓRIA PARA O PDF PODER USAR DEPOIS
+        window.dadosRelatorioAtual = {
+            totalFaturado, totalAtendimentos, ticketMedio, pagamentos, barbeirosFaturamento, periodoTexto
+        };
+
+        // 2. LAYOUT PARA A TELA (BOOTSTRAP RESPONSIVO - BONITO NO CELULAR)
+        const html = `
+            <div style="background-color: #ffffff; padding: 15px; color: #202124; font-family: sans-serif;">
+                <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #e8eaed; padding-bottom: 15px;">
+                    <h3 style="margin: 0; color: #202124; font-size: 1.3rem;">✂ Yan Barbeiro</h3>
+                    <p style="margin: 5px 0 0; color: #5f6368; font-size: 0.85rem;">Relatório de Faturação: <strong>${periodoTexto}</strong></p>
+                </div>
+                
+                <div class="row g-2 mb-4 text-center">
+                    <div class="col-12">
+                        <div style="background: #e8f0fe; padding: 15px; border-radius: 8px; border: 1px solid #c6dafc;">
+                            <p style="margin:0; font-size:0.75rem; color:#5f6368; text-transform:uppercase; font-weight:600;">Faturação Total</p>
+                            <h4 style="margin:5px 0 0; color:#1a73e8; font-weight:700; font-size: 1.5rem;">${window.formatarMoeda ? window.formatarMoeda(totalFaturado) : 'R$ '+totalFaturado.toFixed(2)}</h4>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div style="background: #ffffff; border: 1px solid #e8eaed; padding: 12px; border-radius: 8px; height: 100%;">
+                            <p style="margin:0; font-size:0.7rem; color:#5f6368; text-transform:uppercase; font-weight:600;">Atendimentos</p>
+                            <h4 style="margin:5px 0 0; color:#202124; font-weight:700; font-size: 1.2rem;">${totalAtendimentos}</h4>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div style="background: #ffffff; border: 1px solid #e8eaed; padding: 12px; border-radius: 8px; height: 100%;">
+                            <p style="margin:0; font-size:0.7rem; color:#5f6368; text-transform:uppercase; font-weight:600;">Ticket Médio</p>
+                            <h4 style="margin:5px 0 0; color:#202124; font-weight:700; font-size: 1.2rem;">${window.formatarMoeda ? window.formatarMoeda(ticketMedio) : 'R$ '+ticketMedio.toFixed(2)}</h4>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-12">
+                        <h6 style="border-bottom: 1px solid #e8eaed; padding-bottom: 8px; margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; margin-top:0;">Por Forma de Pagamento</h6>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                            ${Object.entries(pagamentos).map(([metodo, valor]) => `
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: left; color: #5f6368;">${metodo}</td>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: right; font-weight: 600; color: #202124;">${window.formatarMoeda ? window.formatarMoeda(valor) : 'R$ '+valor.toFixed(2)}</td>
+                                </tr>
+                            `).join("")}
+                        </table>
+                    </div>
+                    <div class="col-12">
+                        <h6 style="border-bottom: 1px solid #e8eaed; padding-bottom: 8px; margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; margin-top:0;">Por Profissional</h6>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                            ${Object.entries(barbeirosFaturamento).map(([nome, valor]) => `
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: left; color: #5f6368;">👤 ${nome}</td>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: right; font-weight: 600; color: #202124;">${window.formatarMoeda ? window.formatarMoeda(valor) : 'R$ '+valor.toFixed(2)}</td>
+                                </tr>
+                            `).join("")}
+                        </table>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 30px; font-size: 0.65rem; color: #9aa0a6; text-align: center;">
+                    Gerado pelo sistema Yan Barbeiro em ${new Date().toLocaleString('pt-BR')}
+                </div>
+            </div>
+        `;
+
+        document.getElementById("conteudo-relatorio-pdf").innerHTML = html;
+        new bootstrap.Modal(document.getElementById("modalRelatorio")).show();
+        
+    } catch(e) {
+        console.error("Erro ao gerar relatório real:", e);
+        alert("Erro ao buscar dados da base de dados.");
+    } finally {
+        btn.innerHTML = textoOrig;
+        btn.disabled = false;
     }
-
-    const dadosFiltrados = window.mockCompletedBookings.filter(b => {
-        const d = new Date(b.completedAt || b.createdAt);
-        return (d >= dataInicio && d <= dataFim) && (barbeiroId === "todos" || String(b.barbeiroId) === String(barbeiroId));
-    });
-
-    let totalFaturado = 0; const pagamentos = { "PIX": 0, "Dinheiro": 0, "Cartão de Débito": 0, "Cartão de Crédito": 0 }, barbeirosFaturamento = {};
-    dadosFiltrados.forEach(b => {
-        totalFaturado += b.price;
-        if (b.metodoPagamento) pagamentos[b.metodoPagamento] += b.price;
-        const bInfo = window.mockBarbers.find(x => String(x.id) === String(b.barbeiroId));
-        const bNome = bInfo ? bInfo.name : "Desconhecido";
-        if (!barbeirosFaturamento[bNome]) barbeirosFaturamento[bNome] = 0;
-        barbeirosFaturamento[bNome] += b.price;
-    });
-
-    const totalAtendimentos = dadosFiltrados.length, ticketMedio = totalAtendimentos > 0 ? (totalFaturado / totalAtendimentos) : 0;
-    const periodoTexto = periodo === "personalizado" ? `${new Date(dataInicioInput).toLocaleDateString('pt-BR')} a ${new Date(dataFimInput).toLocaleDateString('pt-BR')}` : document.getElementById("filtro-periodo").options[document.getElementById("filtro-periodo").selectedIndex].text;
-
-    // LAYOUT BLINDADO: Bootstrap para as caixas, Tabelas HTML puras para as listas.
-    const html = `
-        <div style="background-color: #ffffff; padding: 15px; color: #202124; font-family: sans-serif;">
-            <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #e8eaed; padding-bottom: 15px;">
-                <h3 style="margin: 0; color: #202124; font-size: 1.3rem;">✂ Yan Barbeiro</h3>
-                <p style="margin: 5px 0 0; color: #5f6368; font-size: 0.85rem;">Relatório de Faturação: <strong>${periodoTexto}</strong></p>
-            </div>
-            
-            <div class="row g-2 mb-4 text-center">
-                <div class="col-12">
-                    <div style="background: #e8f0fe; padding: 15px; border-radius: 8px; border: 1px solid #c6dafc;">
-                        <p style="margin:0; font-size:0.75rem; color:#5f6368; text-transform:uppercase; font-weight:600;">Faturação Total</p>
-                        <h4 style="margin:5px 0 0; color:#1a73e8; font-weight:700; font-size: 1.5rem;">${window.formatarMoeda ? window.formatarMoeda(totalFaturado) : 'R$ '+totalFaturado.toFixed(2)}</h4>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div style="background: #ffffff; border: 1px solid #e8eaed; padding: 12px; border-radius: 8px; height: 100%;">
-                        <p style="margin:0; font-size:0.7rem; color:#5f6368; text-transform:uppercase; font-weight:600;">Atendimentos</p>
-                        <h4 style="margin:5px 0 0; color:#202124; font-weight:700; font-size: 1.2rem;">${totalAtendimentos}</h4>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div style="background: #ffffff; border: 1px solid #e8eaed; padding: 12px; border-radius: 8px; height: 100%;">
-                        <p style="margin:0; font-size:0.7rem; color:#5f6368; text-transform:uppercase; font-weight:600;">Ticket Médio</p>
-                        <h4 style="margin:5px 0 0; color:#202124; font-weight:700; font-size: 1.2rem;">${window.formatarMoeda ? window.formatarMoeda(ticketMedio) : 'R$ '+ticketMedio.toFixed(2)}</h4>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row g-4">
-                <div class="col-12">
-                    <h6 style="border-bottom: 1px solid #e8eaed; padding-bottom: 8px; margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; margin-top:0;">Por Forma de Pagamento</h6>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                        ${Object.entries(pagamentos).map(([metodo, valor]) => `
-                            <tr>
-                                <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: left; color: #5f6368;">${metodo}</td>
-                                <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: right; font-weight: 600; color: #202124;">${window.formatarMoeda ? window.formatarMoeda(valor) : 'R$ '+valor.toFixed(2)}</td>
-                            </tr>
-                        `).join("")}
-                    </table>
-                </div>
-                <div class="col-12">
-                    <h6 style="border-bottom: 1px solid #e8eaed; padding-bottom: 8px; margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; margin-top:0;">Por Profissional</h6>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                        ${Object.entries(barbeirosFaturamento).map(([nome, valor]) => `
-                            <tr>
-                                <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: left; color: #5f6368;">👤 ${nome}</td>
-                                <td style="padding: 8px 0; border-bottom: 1px solid #f1f3f4; text-align: right; font-weight: 600; color: #202124;">${window.formatarMoeda ? window.formatarMoeda(valor) : 'R$ '+valor.toFixed(2)}</td>
-                            </tr>
-                        `).join("")}
-                    </table>
-                </div>
-            </div>
-            
-            <div style="margin-top: 30px; font-size: 0.65rem; color: #9aa0a6; text-align: center;">
-                Gerado pelo sistema Yan Barbeiro em ${new Date().toLocaleString('pt-BR')}
-            </div>
-        </div>
-    `;
-
-    document.getElementById("conteudo-relatorio-pdf").innerHTML = html;
-    new bootstrap.Modal(document.getElementById("modalRelatorio")).show();
 };
 
 window.baixarPDFRelatorio = () => {
-    const elemento = document.getElementById("conteudo-relatorio-pdf");
-    const periodo = document.getElementById("filtro-periodo").value;
-    
-    const opt = { 
-        margin: 10, 
-        filename: `relatorio_financeiro_${periodo}.pdf`, 
-        image: { type: 'jpeg', quality: 0.98 }, 
-        // windowWidth garante que o PDF finja ser um ecrã de computador, não sobrepondo os itens
-        html2canvas: { scale: 2, useCORS: true, windowWidth: 800 }, 
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
-    };
-    
-    const btn = document.querySelector("#modalRelatorio .btn-success");
-    const textoOriginal = btn.innerHTML; 
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> A Gerar...'; 
-    btn.disabled = true;
-    
-    html2pdf().set(opt).from(elemento).save().then(() => { 
-        btn.innerHTML = textoOriginal; 
-        btn.disabled = false; 
+    if (!window.dadosRelatorioAtual) return alert("Erro: Dados não encontrados.");
+    const { totalFaturado, totalAtendimentos, ticketMedio, pagamentos, barbeirosFaturamento, periodoTexto } = window.dadosRelatorioAtual;
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Título
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Relatorio Yan Barbeiro", 105, 20, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(`Periodo: ${periodoTexto}`, 105, 30, { align: "center" });
+
+    // Resumo
+    doc.line(10, 35, 200, 35);
+    doc.text(`Faturacao Total: ${window.formatarMoeda(totalFaturado)}`, 10, 45);
+    doc.text(`Atendimentos: ${totalAtendimentos}`, 10, 52);
+    doc.text(`Ticket Medio: ${window.formatarMoeda(ticketMedio)}`, 10, 59);
+
+    // Pagamentos
+    doc.setFontSize(14);
+    doc.text("Por Forma de Pagamento", 10, 75);
+    doc.setFontSize(11);
+    let y = 85;
+    Object.entries(pagamentos).forEach(([metodo, valor]) => {
+        doc.text(`${metodo}: ${window.formatarMoeda(valor)}`, 15, y);
+        y += 7;
     });
+
+    // Profissionais
+    y += 10;
+    doc.setFontSize(14);
+    doc.text("Por Profissional", 10, y);
+    doc.setFontSize(11);
+    y += 10;
+    Object.entries(barbeirosFaturamento).forEach(([nome, valor]) => {
+        doc.text(`${nome}: ${window.formatarMoeda(valor)}`, 15, y);
+        y += 7;
+    });
+
+    doc.save(`relatorio_financeiro.pdf`);
 };
 
 /* ============================================================

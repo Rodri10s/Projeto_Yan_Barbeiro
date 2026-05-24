@@ -344,7 +344,18 @@
             margin-bottom: 0.75rem;
           "
         >
-          Agenda de Hoje
+          <div class="d-flex justify-content-between align-items-center mb-3">
+          <p style="font-size: 0.875rem; font-weight: 600; color: var(--text); margin: 0;">
+            Agenda do Dia
+          </p>
+          <input 
+            type="date" 
+            id="filtro-data-agenda" 
+            class="form-control" 
+            style="width: auto; font-size: 0.85rem; padding: 0.3rem 0.5rem;" 
+            onchange="window.renderizarAgendaBarbeiro()"
+          >
+        </div>
         </p>
         <div class="d-flex flex-column gap-2" id="lista-agenda-barbeiro">
           <div class="empty-state">
@@ -690,7 +701,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <script type="module" src="core.js"></script>
     <script type="module" src="cliente.js"></script>

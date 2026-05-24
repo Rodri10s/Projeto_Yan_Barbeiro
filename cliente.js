@@ -28,9 +28,14 @@ const db  = getFirestore(app);
 const toMin   = s => { const [h,m] = s.split(":").map(Number); return h*60+m; };
 const toHHMM  = n => `${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`;
 const hojeISO = () => new Date().toISOString().split("T")[0];
-const fmtData = iso => new Date(iso+"T12:00:00")
-    .toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+const fmtData = iso => new Date(iso+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
 
+// NOVO: Calcula uma data futura para limitar o calendário
+const addDiasISO = (iso, dias) => {
+    const d = new Date(iso + "T12:00:00");
+    d.setDate(d.getDate() + dias);
+    return d.toISOString().split("T")[0];
+};
 /* ── máscara de telefone (xx) xxxxx-xxxx ──────────────────── */
 const aplicarMascara = (input) => {
     input.addEventListener("input", () => {
@@ -177,14 +182,22 @@ window.selecionarBarbeiro = (id, evt) => {
 
 /*
   gerarSlotsDisponiveis:
-  1. Lê escala do barbeiro (escalaInicio / escalaFim)
-  2. Busca agendamentos do barbeiro na data no Firestore
-  3. Gera slots de 15 em 15 min; bloqueia colisões e horários passados
-  4. Cada barbeiro tem agenda totalmente independente
+  1. Lê escala, bloqueia domingos, limita sábado até as 12h
+  2. Busca agendamentos e bloqueia o horário de almoço (12h às 14h)
 */
 window.gerarSlotsDisponiveis = async (barbeiro, data, duracaoMin) => {
-    const inicio = toMin(barbeiro.escalaInicio);
-    const fim    = toMin(barbeiro.escalaFim);
+    let inicio = toMin(barbeiro.escalaInicio);
+    let fim    = toMin(barbeiro.escalaFim);
+
+    // Identifica qual é o dia da semana (0 = Domingo, 6 = Sábado)
+    const dateObj = new Date(data + "T12:00:00");
+    const diaSemana = dateObj.getDay();
+
+    // REGRA 1: Se for sábado, o limite máximo de trabalho é 12:00 (720 minutos)
+    if (diaSemana === 6) {
+        const meioDia = 12 * 60;
+        if (fim > meioDia) fim = meioDia;
+    }
 
     let agendados = [];
     try {
@@ -196,17 +209,29 @@ window.gerarSlotsDisponiveis = async (barbeiro, data, duracaoMin) => {
         });
     } catch(e){ console.error("Erro slots:",e); }
 
-    // Bloqueia horários que já passaram quando a data for hoje
-    const agora = data === hojeISO()
-        ? new Date().getHours()*60 + new Date().getMinutes()
-        : -1;
+    const agora = data === hojeISO() ? new Date().getHours()*60 + new Date().getMinutes() : -1;
+    
+    // REGRA 2: Horário de Almoço (12:00 às 14:00 em minutos)
+    const inicioAlmoco = 12 * 60; // 720
+    const fimAlmoco = 14 * 60;    // 840
 
     const slots = [];
     for (let cur=inicio; cur+duracaoMin<=fim; cur+=15){
-        const sf      = cur + duracaoMin;
+        const sf = cur + duracaoMin;
+
+        // Verifica se o slot cruza com o horário de almoço
+        const noAlmoco = (cur < fimAlmoco && sf > inicioAlmoco);
+        
+        // Verifica se cruza com outro agendamento
         const ocupado = agendados.some(ag => cur < ag.fim && sf > ag.ini);
+        
+        // Verifica se é passado
         const passado = cur <= agora;
-        slots.push({ hhmm: toHHMM(cur), disponivel: !ocupado && !passado });
+
+        slots.push({ 
+            hhmm: toHHMM(cur), 
+            disponivel: !ocupado && !passado && !noAlmoco 
+        });
     }
     return slots;
 };
@@ -233,6 +258,18 @@ window.renderizarHorarios = async () => {
         return;
     }
 
+    // REGRA 3: Bloqueio total aos Domingos logo na interface
+    const dateObj = new Date(data + "T12:00:00");
+    if (dateObj.getDay() === 0) {
+        grade.innerHTML = `<p class="text-danger fw-semibold text-center mt-3" style="font-size:.9rem;">
+            <i class="bi bi-calendar-x" style="font-size:1.5rem; display:block; margin-bottom:5px;"></i> 
+            Aos domingos estamos fechados.
+        </p>`;
+        document.getElementById("btn-next-horario").disabled = true;
+        if (hint){ hint.textContent="Estamos fechados"; hint.className="date-picker-hint text-danger"; }
+        return;
+    }
+
     if (hint){ hint.textContent = fmtData(data); hint.className="date-picker-hint selected"; }
 
     window.appState.agendamento.data    = data;
@@ -246,7 +283,7 @@ window.renderizarHorarios = async () => {
     const slots = await window.gerarSlotsDisponiveis(b, data, svc.duration);
 
     if (!slots.length){
-        grade.innerHTML = `<p class="text-muted" style="font-size:.875rem">Barbeiro sem escala configurada.</p>`;
+        grade.innerHTML = `<p class="text-muted" style="font-size:.875rem">Nenhum horário gerado (verifique a escala ou horário limite).</p>`;
         return;
     }
     if (!slots.some(s => s.disponivel)){
@@ -294,28 +331,48 @@ const _entrarStepHorario = () => {
 };
 
 /* ── STEP 4 — resumo ──────────────────────────────────────── */
-window.atualizarResumo = () => {
+window.atualizarResumo = async () => {
+    // Se o seu colega adicionou alguma função nova aqui (como o renderizarCalendario), mantenha-a!
+    
     const ag = window.appState.agendamento;
     document.getElementById("resumo-servico").textContent  = ag.servicoNome || "-";
     document.getElementById("resumo-barbeiro").textContent = ag.barbeiroNome || "-";
-    document.getElementById("resumo-horario").textContent  = ag.horario
-        ? `${fmtData(ag.data)}, às ${ag.horario}` : "-";
-    document.getElementById("resumo-preco").textContent = ag.servico
-        ? `R$ ${Number(ag.servico.price).toFixed(2)}` : "-";
-    const end = window.getEnderecoAtivo();
-    const el  = document.getElementById("resumo-local");
-    if (el) el.textContent = end ? `${end.rua}, ${end.numero} — ${end.bairro}` : "-";
+    document.getElementById("resumo-horario").textContent  = ag.horario ? `${fmtData(ag.data)}, às ${ag.horario}` : "-";
+    document.getElementById("resumo-preco").textContent = ag.servico ? `R$ ${Number(ag.servico.price).toFixed(2)}` : "-";
+    
+    const el = document.getElementById("resumo-local");
+    if (el) el.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span> Buscando...';
+
+    try {
+        // Puxa o endereço DIRETAMENTE do banco de dados em tempo real
+        const snap = await getDocs(collection(db, "enderecos"));
+        if (!snap.empty) {
+            const end = snap.docs[0].data();
+            window.appState.enderecoAtivo = end; // Guarda na memória para o modal usar
+            if (el) el.textContent = `${end.rua}, ${end.numero} — ${end.bairro}`;
+        } else {
+            window.appState.enderecoAtivo = null;
+            if (el) el.textContent = "Endereço não cadastrado";
+        }
+    } catch (e) {
+        console.error("Erro ao buscar endereço:", e);
+        if (el) el.textContent = "Erro ao carregar local";
+    }
 };
 
 /* ── confirmação → Firestore ──────────────────────────────── */
 window.confirmarAgendamento = async () => {
     const ag  = window.appState.agendamento;
     const cli = window.appState.clienteAtual;
+    
     if (!ag.servicoId||!ag.barbeiroId||!ag.data||!ag.horario){
         alert("Por favor, complete todas as etapas antes de confirmar."); return;
     }
+    
     const btn  = document.getElementById("btn-confirmar-agendamento");
     const orig = btn.innerHTML;
+    
+    // Inicia a roleta de carregamento
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Confirmando...';
     btn.disabled  = true;
 
@@ -342,17 +399,21 @@ window.confirmarAgendamento = async () => {
 
     try {
         const ref = await addDoc(collection(db,"agendamentos"), novoAg);
-        console.log("✅ Agendamento salvo:", ref.id);
-        window.mockBookings?.push({ id:ref.id, ...novoAg });
+        if (window.mockBookings) window.mockBookings.push({ id:ref.id, ...novoAg });
 
-        ["cliente-nome","cliente-telefone","cliente-email"]
-            .forEach(id => document.getElementById(id).value="");
+        ["cliente-nome","cliente-telefone","cliente-email"].forEach(id => {
+            const input = document.getElementById(id);
+            if(input) input.value="";
+        });
 
-        window.abrirModalSucesso(novoAg, window.getEnderecoAtivo());
+        // Invoca a janela modal com o endereço correto
+        window.abrirModalSucesso(novoAg, window.appState.enderecoAtivo);
 
-    } catch(e){
+    } catch(e) {
         console.error("Erro ao salvar:", e);
-        alert("Erro ao confirmar agendamento.\n\n"+e.message);
+        alert("Erro na ligação ao servidor.\\nVerifique a sua internet ou as Regras do Firestore.\\nDetalhe: " + e.message);
+    } finally {
+        // GARANTE QUE O BOTÃO PARA DE GIRAR
         btn.innerHTML = orig;
         btn.disabled  = false;
     }
@@ -387,6 +448,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const inp = document.getElementById("horario-data-input");
     if (inp){
         inp.min = hojeISO();
+        inp.max = addDiasISO(hojeISO(), 30); // NOVO: Trava o calendário 30 dias pra frente
         inp.addEventListener("change", window.renderizarHorarios);
     }
 
