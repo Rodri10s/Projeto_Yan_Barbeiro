@@ -223,14 +223,12 @@
 
         <div class="wizard-step" id="step-horario">
           <p class="wizard-title">Passo 3 — Escolher Horário</p>
-          <div class="date-picker-card">
-            <div class="date-picker-header">
-              <i class="bi bi-calendar3-week"></i>
-              <span>Escolha a data</span>
-            </div>
-            <input type="date" id="horario-data-input" class="date-picker-input" />
-            <p class="date-picker-hint" id="date-picker-hint">Selecione uma data para ver os horários disponíveis</p>
+          <div class="mb-2">
+            <p class="date-chips-label"><i class="bi bi-calendar3"></i> Escolha a data</p>
+            <div class="date-chips-scroll" id="date-chips"></div>
+            <p class="cal-hint" id="date-picker-hint">Selecione uma data para ver os horários disponíveis</p>
           </div>
+          <input type="hidden" id="horario-data-input" />
           <div class="horario-grid" id="grade-horarios"></div>
           <div class="d-flex gap-2 mt-4">
             <button
@@ -251,8 +249,25 @@
           </div>
         </div>
 
+        <div class="wizard-step" id="step-endereco">
+          <p class="wizard-title">Passo 4 — Escolher Local</p>
+          <div id="lista-enderecos-cliente" class="enderecos-lista">
+            <div class="text-center my-3">
+              <span class="spinner-border spinner-border-sm text-primary"></span> Carregando endereços...
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-4">
+            <button type="button" class="btn btn-outline btn-lg flex-grow-1" id="btn-voltar-endereco-wizard">
+              <i class="bi bi-arrow-left"></i> Voltar
+            </button>
+            <button type="button" class="btn btn-primary btn-lg flex-grow-1" id="btn-next-endereco" disabled>
+              Continuar <i class="bi bi-arrow-right"></i>
+            </button>
+          </div>
+        </div>
+
         <div class="wizard-step" id="step-resumo">
-          <p class="wizard-title">Passo 4 — Confirmação</p>
+          <p class="wizard-title">Passo 5 — Confirmação</p>
           <div class="resumo-card">
             <div class="resumo-item">
               <span class="resumo-label"
