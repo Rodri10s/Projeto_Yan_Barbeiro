@@ -22,67 +22,16 @@ const db  = getFirestore(app);
 const toMin   = s => { const [h,m] = s.split(":").map(Number); return h*60+m; };
 const toHHMM  = n => `${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`;
 const hojeISO = () => new Date().toISOString().split("T")[0];
-const fmtData = iso => new Date(iso+"T12:00:00")
-    .toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-const emailValido = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+const fmtData = iso => new Date(iso+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
 
-const MAX_DIAS    = 30;
-const ALMOCO_INI  = 12 * 60;
-const ALMOCO_FIM  = 14 * 60;
-const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-const MESES_CURTO = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
-
-/* ── regras de data ───────────────────────────────────────── */
-const dataPermitida = iso => {
-    const d   = new Date(iso+"T12:00:00");
-    const dow = d.getDay();
-    if (dow === 0) return false;
-    const hoje   = new Date(hojeISO()+"T12:00:00");
-    const limite = new Date(hoje); limite.setDate(hoje.getDate() + MAX_DIAS);
-    return d >= hoje && d <= limite;
+// NOVO: Calcula uma data futura para limitar o calendário
+const addDiasISO = (iso, dias) => {
+    const d = new Date(iso + "T12:00:00");
+    d.setDate(d.getDate() + dias);
+    return d.toISOString().split("T")[0];
 };
-
-/* ── chips de data ────────────────────────────────────────── */
-window.iniciarCalendario = () => _renderizarChips();
-
-const _renderizarChips = () => {
-    const container = document.getElementById("date-chips");
-    if (!container) return;
-    const hoje      = new Date(); hoje.setHours(0,0,0,0);
-    const selecionada = document.getElementById("horario-data-input")?.value || "";
-    let html = "";
-    for (let i = 0; i <= MAX_DIAS; i++) {
-        const d   = new Date(hoje); d.setDate(hoje.getDate() + i);
-        const dow = d.getDay();
-        if (dow === 0) continue;
-        const iso      = d.toISOString().split("T")[0];
-        const permitida = dataPermitida(iso);
-        const isSel    = iso === selecionada;
-        const isHoje   = i === 0;
-        let cls = "date-chip";
-        if (!permitida)       cls += " date-chip--disabled";
-        if (isHoje && !isSel) cls += " date-chip--today";
-        if (isSel)            cls += " date-chip--selected";
-        const onclick = permitida ? `onclick="window._selecionarDataCal('${iso}')"` : "";
-        html += `<div class="${cls}" ${onclick}>
-            <span class="date-chip__dow">${DIAS_SEMANA[dow]}</span>
-            <span class="date-chip__day">${d.getDate()}</span>
-            <span class="date-chip__mon">${MESES_CURTO[d.getMonth()]}</span>
-        </div>`;
-    }
-    container.innerHTML = html;
-};
-
-window._selecionarDataCal = iso => {
-    document.getElementById("horario-data-input").value = iso;
-    const hint = document.getElementById("date-picker-hint");
-    if (hint){ hint.textContent = fmtData(iso); hint.className = "cal-hint selected"; }
-    _renderizarChips();
-    window.renderizarHorarios();
-};
-
-/* ── máscara de telefone ──────────────────────────────────── */
-const aplicarMascara = input => {
+/* ── máscara de telefone (xx) xxxxx-xxxx ──────────────────── */
+const aplicarMascara = (input) => {
     input.addEventListener("input", () => {
         let v = input.value.replace(/\D/g,"").slice(0,11);
         if (v.length <= 10) v = v.replace(/^(\d{2})(\d{4})(\d{0,4})$/,"($1) $2-$3");
@@ -209,11 +158,25 @@ window.selecionarBarbeiro = (id, evt) => {
 };
 
 /* ── STEP 3 — data + horários ─────────────────────────────── */
+
+/*
+  gerarSlotsDisponiveis:
+  1. Lê escala, bloqueia domingos, limita sábado até as 12h
+  2. Busca agendamentos e bloqueia o horário de almoço (12h às 14h)
+*/
 window.gerarSlotsDisponiveis = async (barbeiro, data, duracaoMin) => {
     let inicio = toMin(barbeiro.escalaInicio);
     let fim    = toMin(barbeiro.escalaFim);
-    const dow  = new Date(data+"T12:00:00").getDay();
-    if (dow === 6) fim = Math.min(fim, 12*60); // sábado até 12h
+
+    // Identifica qual é o dia da semana (0 = Domingo, 6 = Sábado)
+    const dateObj = new Date(data + "T12:00:00");
+    const diaSemana = dateObj.getDay();
+
+    // REGRA 1: Se for sábado, o limite máximo de trabalho é 12:00 (720 minutos)
+    if (diaSemana === 6) {
+        const meioDia = 12 * 60;
+        if (fim > meioDia) fim = meioDia;
+    }
 
     let agendados = [];
     try {
@@ -228,15 +191,29 @@ window.gerarSlotsDisponiveis = async (barbeiro, data, duracaoMin) => {
         });
     } catch(e){ console.error("Erro slots:",e); }
 
-    const agora = data===hojeISO() ? new Date().getHours()*60+new Date().getMinutes() : -1;
+    const agora = data === hojeISO() ? new Date().getHours()*60 + new Date().getMinutes() : -1;
+    
+    // REGRA 2: Horário de Almoço (12:00 às 14:00 em minutos)
+    const inicioAlmoco = 12 * 60; // 720
+    const fimAlmoco = 14 * 60;    // 840
 
     const slots = [];
     for (let cur=inicio; cur+duracaoMin<=fim; cur+=15){
-        const sf        = cur+duracaoMin;
-        const noAlmoco  = cur < ALMOCO_FIM && sf > ALMOCO_INI;
-        const ocupado   = agendados.some(ag => cur < ag.fim && sf > ag.ini);
-        const passado   = cur <= agora;
-        slots.push({ hhmm:toHHMM(cur), disponivel: !noAlmoco && !ocupado && !passado });
+        const sf = cur + duracaoMin;
+
+        // Verifica se o slot cruza com o horário de almoço
+        const noAlmoco = (cur < fimAlmoco && sf > inicioAlmoco);
+        
+        // Verifica se cruza com outro agendamento
+        const ocupado = agendados.some(ag => cur < ag.fim && sf > ag.ini);
+        
+        // Verifica se é passado
+        const passado = cur <= agora;
+
+        slots.push({ 
+            hhmm: toHHMM(cur), 
+            disponivel: !ocupado && !passado && !noAlmoco 
+        });
     }
     return slots;
 };
@@ -256,18 +233,31 @@ window.renderizarHorarios = async () => {
         grade.innerHTML = `<p class="text-danger" style="font-size:.875rem"><i class="bi bi-x-circle"></i> Data não disponível para agendamento.</p>`;
         document.getElementById("btn-next-horario").disabled = true; return;
     }
-    const dow = new Date(data+"T12:00:00").getDay();
-    if (dow===0){
-        grade.innerHTML = `<p class="text-danger fw-semibold text-center mt-3" style="font-size:.9rem"><i class="bi bi-calendar-x" style="font-size:1.5rem;display:block;margin-bottom:5px;"></i> Aos domingos estamos fechados.</p>`;
-        document.getElementById("btn-next-horario").disabled = true; return;
+
+    // REGRA 3: Bloqueio total aos Domingos logo na interface
+    const dateObj = new Date(data + "T12:00:00");
+    if (dateObj.getDay() === 0) {
+        grade.innerHTML = `<p class="text-danger fw-semibold text-center mt-3" style="font-size:.9rem;">
+            <i class="bi bi-calendar-x" style="font-size:1.5rem; display:block; margin-bottom:5px;"></i> 
+            Aos domingos estamos fechados.
+        </p>`;
+        document.getElementById("btn-next-horario").disabled = true;
+        if (hint){ hint.textContent="Estamos fechados"; hint.className="date-picker-hint text-danger"; }
+        return;
     }
-    if (hint){ hint.textContent = fmtData(data); hint.className = "cal-hint selected"; }
+
+    if (hint){ hint.textContent = fmtData(data); hint.className="date-picker-hint selected"; }
+
     window.appState.agendamento.data    = data;
     window.appState.agendamento.horario = null;
     document.getElementById("btn-next-horario").disabled = true;
     grade.innerHTML = `<div class="text-center my-2 w-100"><span class="spinner-border spinner-border-sm text-primary"></span> Verificando disponibilidade...</div>`;
     const slots = await window.gerarSlotsDisponiveis(b, data, svc.duration);
-    if (!slots.length){ grade.innerHTML = `<p class="text-muted" style="font-size:.875rem">Nenhum horário gerado (verifique a escala).</p>`; return; }
+
+    if (!slots.length){
+        grade.innerHTML = `<p class="text-muted" style="font-size:.875rem">Nenhum horário gerado (verifique a escala ou horário limite).</p>`;
+        return;
+    }
     if (!slots.some(s => s.disponivel)){
         grade.innerHTML = `<p class="text-warning fw-semibold" style="font-size:.875rem"><i class="bi bi-exclamation-triangle"></i> Nenhum horário disponível neste dia. Escolha outra data.</p>`; return;
     }
@@ -348,18 +338,51 @@ const _entrarStepHorario = () => {
     window.appState.agendamento.data    = null;
     window.appState.agendamento.horario = null;
     document.getElementById("btn-next-horario").disabled = true;
-    _renderizarChips();
+};
+
+/* ── STEP 4 — resumo ──────────────────────────────────────── */
+window.atualizarResumo = async () => {
+    // Se o seu colega adicionou alguma função nova aqui (como o renderizarCalendario), mantenha-a!
+    
+    const ag = window.appState.agendamento;
+    document.getElementById("resumo-servico").textContent  = ag.servicoNome || "-";
+    document.getElementById("resumo-barbeiro").textContent = ag.barbeiroNome || "-";
+    document.getElementById("resumo-horario").textContent  = ag.horario ? `${fmtData(ag.data)}, às ${ag.horario}` : "-";
+    document.getElementById("resumo-preco").textContent = ag.servico ? `R$ ${Number(ag.servico.price).toFixed(2)}` : "-";
+    
+    const el = document.getElementById("resumo-local");
+    if (el) el.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span> Buscando...';
+
+    try {
+        // Puxa o endereço DIRETAMENTE do banco de dados em tempo real
+        const snap = await getDocs(collection(db, "enderecos"));
+        if (!snap.empty) {
+            const end = snap.docs[0].data();
+            window.appState.enderecoAtivo = end; // Guarda na memória para o modal usar
+            if (el) el.textContent = `${end.rua}, ${end.numero} — ${end.bairro}`;
+        } else {
+            window.appState.enderecoAtivo = null;
+            if (el) el.textContent = "Endereço não cadastrado";
+        }
+    } catch (e) {
+        console.error("Erro ao buscar endereço:", e);
+        if (el) el.textContent = "Erro ao carregar local";
+    }
 };
 
 /* ── confirmação → Firestore ──────────────────────────────── */
 window.confirmarAgendamento = async () => {
     const ag  = window.appState.agendamento;
     const cli = window.appState.clienteAtual;
+    
     if (!ag.servicoId||!ag.barbeiroId||!ag.data||!ag.horario){
         alert("Por favor, complete todas as etapas antes de confirmar."); return;
     }
+    
     const btn  = document.getElementById("btn-confirmar-agendamento");
     const orig = btn.innerHTML;
+    
+    // Inicia a roleta de carregamento
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Confirmando...';
     btn.disabled  = true;
     const iniMin = toMin(ag.horario);
@@ -379,16 +402,24 @@ window.confirmarAgendamento = async () => {
     };
     try {
         const ref = await addDoc(collection(db,"agendamentos"), novoAg);
-        console.log("✅ Agendamento salvo:", ref.id);
         if (window.mockBookings) window.mockBookings.push({ id:ref.id, ...novoAg });
+
         ["cliente-nome","cliente-telefone","cliente-email"].forEach(id => {
-            const el = document.getElementById(id); if(el) el.value="";
+            const input = document.getElementById(id);
+            if(input) input.value="";
         });
-        window.abrirModalSucesso(novoAg, end);
-    } catch(e){
+
+        // Invoca a janela modal com o endereço correto
+        window.abrirModalSucesso(novoAg, window.appState.enderecoAtivo);
+
+    } catch(e) {
         console.error("Erro ao salvar:", e);
-        alert("Erro na ligação ao servidor.\nDetalhe: "+e.message);
-    } finally { btn.innerHTML = orig; btn.disabled = false; }
+        alert("Erro na ligação ao servidor.\\nVerifique a sua internet ou as Regras do Firestore.\\nDetalhe: " + e.message);
+    } finally {
+        // GARANTE QUE O BOTÃO PARA DE GIRAR
+        btn.innerHTML = orig;
+        btn.disabled  = false;
+    }
 };
 
 /* ── reset ────────────────────────────────────────────────── */
