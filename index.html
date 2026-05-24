@@ -44,7 +44,7 @@
                 type="tel"
                 id="cliente-telefone"
                 class="form-control"
-                placeholder="Ex: +351 9XX XXX XXX"
+                placeholder="(xx) xxxxx-xxxx" maxlength="15"
                 required
               />
             </div>
@@ -223,6 +223,14 @@
 
         <div class="wizard-step" id="step-horario">
           <p class="wizard-title">Passo 3 — Escolher Horário</p>
+          <div class="date-picker-card">
+            <div class="date-picker-header">
+              <i class="bi bi-calendar3-week"></i>
+              <span>Escolha a data</span>
+            </div>
+            <input type="date" id="horario-data-input" class="date-picker-input" />
+            <p class="date-picker-hint" id="date-picker-hint">Selecione uma data para ver os horários disponíveis</p>
+          </div>
           <div class="horario-grid" id="grade-horarios"></div>
           <div class="d-flex gap-2 mt-4">
             <button
@@ -689,5 +697,22 @@
     <script type="module" src="barbeiro.js"></script>
     <script type="module" src="admin.js"></script>
 
-  </body>
+  
+    <!-- Modal sucesso -->
+    <div id="modal-sucesso" style="display:none;position:fixed;inset:0;z-index:9999;
+         background:rgba(0,0,0,.55);backdrop-filter:blur(3px);
+         align-items:center;justify-content:center;">
+      <div class="sucesso-card">
+        <div class="sucesso-icon-wrap">
+          <i class="bi bi-check-lg sucesso-icon"></i>
+        </div>
+        <h2 class="sucesso-titulo">Agendamento Confirmado!</h2>
+        <p class="sucesso-subtitulo">Até breve! Seu horário está reservado.</p>
+        <div class="sucesso-detalhes" id="sucesso-detalhes"></div>
+        <button class="btn btn-primary btn-lg w-100 mt-3" onclick="window.fecharModalSucesso()">
+          <i class="bi bi-calendar-plus"></i> Fazer outro agendamento
+        </button>
+      </div>
+    </div>
+</body>
 </html>
