@@ -64,6 +64,7 @@ window.renderizarAgendaBarbeiro = async () => {
     const c = document.getElementById("lista-agenda-barbeiro");
     c.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm text-primary"></span> Carregando a sua agenda...</div>';
 
+    // Injeção do Modal de Encaixe
     if (!document.getElementById("modalEncaixe")) {
         const modalHTML = `
           <div class="modal fade" id="modalEncaixe" tabindex="-1" aria-hidden="true">
@@ -88,6 +89,32 @@ window.renderizarAgendaBarbeiro = async () => {
         document.body.insertAdjacentHTML("beforeend", modalHTML);
     }
 
+    // Injeção do Modal de Informações do Cliente
+    if (!document.getElementById("modalInfoCliente")) {
+        const modalInfoHTML = `
+          <div class="modal fade" id="modalInfoCliente" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detalhes do Contato</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                  <p style="margin-bottom: 0.5rem;"><strong>Nome:</strong> <span id="info-cliente-nome"></span></p>
+                  <p style="margin-bottom: 0.5rem;"><strong>Telefone:</strong> <span id="info-cliente-telefone"></span></p>
+                  <p style="margin-bottom: 0;"><strong>Email:</strong> <span id="info-cliente-email"></span></p>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" onclick="bootstrap.Modal.getInstance(document.getElementById('modalInfoCliente')).hide()">Fechar</button>
+                  <a href="#" id="btn-whatsapp-cliente" target="_blank" class="btn btn-success"><i class="bi bi-whatsapp"></i> WhatsApp</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.insertAdjacentHTML("beforeend", modalInfoHTML);
+    }
+
     try {
         const querySnapshot = await window.getDocs(window.collection(window.db, "agendamentos"));
         const todosAgendamentos = [];
@@ -99,7 +126,12 @@ window.renderizarAgendaBarbeiro = async () => {
         document.getElementById("total-atendimentos").textContent = concluidosHoje.length; 
         
         const faturamentoDiario = concluidosHoje.reduce((s, b) => s + (Number(b.price) || 0), 0);
-        document.getElementById("total-faturacao").textContent = window.formatarMoeda ? window.formatarMoeda(faturamentoDiario) : "R$ " + faturamentoDiario.toFixed(2);
+        
+        // Elemento de faturamento com correção para não estourar a caixa
+        const faturamentoEl = document.getElementById("total-faturacao");
+        faturamentoEl.textContent = window.formatarMoeda ? window.formatarMoeda(faturamentoDiario) : "R$ " + faturamentoDiario.toFixed(2);
+        faturamentoEl.style.wordBreak = "break-word";
+        faturamentoEl.style.fontSize = "clamp(1rem, 4vw, 1.5rem)";
 
         const btnEncaixeHTML = `
             <button class="btn btn-outline btn-sm w-100 mb-3" style="border-color: var(--primary); color: var(--primary);" onclick="window.abrirModalEncaixe()">
@@ -112,12 +144,39 @@ window.renderizarAgendaBarbeiro = async () => {
         } else {
             let htmlLista = agendaHoje.map(bk => {
                 const sv = window.mockServices.find(s => String(s.id) === String(bk.serviceId)) || { name: bk.servicoNome || "Serviço" };
+                
+                // Tratamento do horário real de criação
+                let criadoEm = "Não registrado";
+                let horaCriacao = "";
+                if(bk.createdAt) {
+                    const dt = new Date(bk.createdAt);
+                    horaCriacao = dt.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+                    criadoEm = dt.toLocaleDateString('pt-BR') + ' às ' + horaCriacao;
+                }
+
+                // Lógica de definição da hora em que o corte vai ser feito:
+                // Tenta puxar o horário agendado (horarioInicio) ou o time, se for encaixe, usa a hora de criação.
+                let horarioAtendimento = bk.horarioInicio || bk.time || 'Avulso';
+                if (bk.tipo === "Encaixe" && horaCriacao) {
+                    horarioAtendimento = horaCriacao;
+                }
+
+                // Proteção contra aspas nos nomes para evitar quebra no clique
+                const nomeSeguro = bk.clientName ? bk.clientName.replace(/'/g, "\\'") : 'Não informado';
+                const foneSeguro = bk.clientPhone ? bk.clientPhone.replace(/'/g, "\\'") : 'Não informado';
+                const emailSeguro = bk.clientEmail ? bk.clientEmail.replace(/'/g, "\\'") : 'Não informado';
+
                 return `<div class="agenda-item">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div style="min-width: 150px;">
-                            <div class="agenda-item-cliente">👤 ${bk.clientName}</div>
+                            <div class="agenda-item-cliente" style="cursor:pointer; color: var(--primary); font-weight: 600;" onclick="window.abrirModalInfoCliente('${nomeSeguro}', '${foneSeguro}', '${emailSeguro}')" title="Clique para detalhes do contato">
+                                👤 <span style="text-decoration: underline;">${bk.clientName}</span> <i class="bi bi-info-circle ms-1" style="font-size: 0.8rem;"></i>
+                            </div>
                             <div class="agenda-item-servico"><i class="bi bi-scissors"></i> ${sv.name}</div>
-                            <div class="agenda-item-hora"><i class="bi bi-clock"></i> ${bk.time || 'Avulso'}</div>
+                            <div class="agenda-item-hora"><i class="bi bi-clock"></i> Para: <strong>${horarioAtendimento}</strong></div>
+                            <div class="agenda-item-criacao" style="font-size: 0.75rem; color: #6c757d; margin-top: 4px;">
+                                <i class="bi bi-calendar-plus"></i> Criado: ${criadoEm}
+                            </div>
                         </div>
                         <div class="d-flex gap-2">
                             <button class="btn btn-outline-danger btn-sm" style="padding: 0.45rem 0.8rem; font-size: 0.85rem;" onclick="window.cancelarAgendamento('${bk.id}')">
@@ -139,7 +198,24 @@ window.renderizarAgendaBarbeiro = async () => {
     }
 };
 
-// 3. FUNÇÕES DE PAGAMENTO / CONCLUSÃO
+// 3. FUNÇÕES DE EXIBIÇÃO DO CLIENTE E PAGAMENTO / CONCLUSÃO
+window.abrirModalInfoCliente = (nome, telefone, email) => {
+    document.getElementById("info-cliente-nome").textContent = nome;
+    document.getElementById("info-cliente-telefone").textContent = telefone;
+    document.getElementById("info-cliente-email").textContent = email;
+    
+    const btnWhats = document.getElementById("btn-whatsapp-cliente");
+    if (telefone && telefone !== 'Não informado') {
+        const numeroLimpo = telefone.replace(/\D/g, ''); // Remove formatação para o link do WhatsApp
+        btnWhats.href = `https://wa.me/55${numeroLimpo}`;
+        btnWhats.style.display = 'inline-block';
+    } else {
+        btnWhats.style.display = 'none';
+    }
+    
+    new bootstrap.Modal(document.getElementById("modalInfoCliente")).show();
+};
+
 window.abrirModalPagamento = (id) => {
     window.appState.editingId = id; 
     new bootstrap.Modal(document.getElementById("modalPagamento")).show();
@@ -210,14 +286,17 @@ window.salvarEncaixe = async () => {
     btn.disabled = true;
 
     try {
+        const dataAgora = new Date();
         const novoAgendamento = {
             clientName: nome + " (Encaixe)",
+            clientPhone: "Não informado", // Evita undefined ao abrir info
+            clientEmail: "Não informado",
             serviceId: servico.id,
             servicoNome: servico.name,
             barbeiroId: window.appState.usuarioAtual.id,
-            time: new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+            time: dataAgora.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
             price: servico.price,
-            createdAt: new Date().toISOString(),
+            createdAt: dataAgora.toISOString(), // Usado para mostrar o tempo real de criação
             completed: false,
             tipo: "Encaixe"
         };
