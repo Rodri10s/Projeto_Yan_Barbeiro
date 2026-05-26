@@ -202,9 +202,12 @@ window.renderizarAgendaBarbeiro = async () => {
 
         // BOTÕES LADO A LADO NA TELA DO BARBEIRO
         const btnAcoesHTML = `
-            <div class="d-flex gap-2 mb-3">
+            <div class="d-flex gap-2 mb-3 flex-wrap">
                 <button class="btn btn-outline btn-sm flex-grow-1" style="border-color: var(--primary); color: var(--primary);" onclick="window.abrirModalEncaixe()">
                     <i class="bi bi-plus-circle"></i> Novo Encaixe
+                </button>
+                <button class="btn btn-danger btn-sm flex-grow-1" onclick="window.abrirModalBloquearDia()">
+                    <i class="bi bi-calendar-x"></i> Bloquear Dia
                 </button>
                 <button class="btn btn-primary btn-sm flex-grow-1" onclick="window.abrirModalRelatorioBarbeiro()">
                     <i class="bi bi-bar-chart-line"></i> Relatório
@@ -394,7 +397,169 @@ window.salvarEncaixe = async () => {
     }
 };
 
-// 5. RELATÓRIO INDIVIDUAL DO BARBEIRO
+// 5. BLOQUEAR DIA — Barbeiro pode bloquear datas para não receber agendamentos
+window.inicializarModalBloquearDia = () => {
+    if (document.getElementById("modalBloquearDia")) return;
+
+    const modalHTML = `
+      <div class="modal fade" id="modalBloquearDia" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-calendar-x"></i> Bloquear / Desbloquear Dia</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="font-size:.875rem; margin-bottom:1rem;">
+                    Selecione uma data para bloquear. Clientes não conseguirão agendar neste dia.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">Data a bloquear</label>
+                    <input type="date" id="bloquear-dia-input" class="form-control" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Motivo (opcional)</label>
+                    <input type="text" id="bloquear-dia-motivo" class="form-control" placeholder="Ex: Feriado, consulta médica..." />
+                </div>
+                <div id="lista-dias-bloqueados" class="mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="window.salvarDiaBloqueado()">
+                    <i class="bi bi-lock-fill"></i> Bloquear Data
+                </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML("beforeend", modalHTML);
+};
+
+window.abrirModalBloquearDia = async () => {
+    window.inicializarModalBloquearDia();
+
+    // Pré-preenche com a data do filtro da agenda
+    const inputAgenda = document.getElementById("filtro-data-agenda");
+    const inputModal  = document.getElementById("bloquear-dia-input");
+    if (inputAgenda && inputModal) inputModal.value = inputAgenda.value || "";
+    document.getElementById("bloquear-dia-motivo").value = "";
+
+    await window.renderizarListaDiasBloqueados();
+    new bootstrap.Modal(document.getElementById("modalBloquearDia")).show();
+};
+
+window.salvarDiaBloqueado = async () => {
+    const data   = document.getElementById("bloquear-dia-input").value;
+    const motivo = document.getElementById("bloquear-dia-motivo").value.trim();
+    const bid    = window.appState.usuarioAtual?.id;
+
+    if (!data) return alert("Selecione uma data para bloquear.");
+
+    // Impede bloquear domingos (já são fechados por padrão)
+    const dateObj    = new Date(data + "T12:00:00");
+    if (dateObj.getDay() === 0) return alert("Domingos já são fechados automaticamente.");
+
+    const btn = document.querySelector("#modalBloquearDia .btn-danger");
+    const textoOriginal = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Bloqueando...';
+    btn.disabled = true;
+
+    try {
+        // Verifica se já existe bloqueio para este barbeiro nesta data
+        const snap = await window.getDocs(window.collection(window.db, "diasBloqueados"));
+        let jaExiste = false;
+        snap.forEach(d => {
+            const dado = d.data();
+            if (dado.data === data && String(dado.barbeiroId) === String(bid)) jaExiste = true;
+        });
+
+        if (jaExiste) {
+            alert("Esta data já está bloqueada.");
+            return;
+        }
+
+        await window.addDoc(window.collection(window.db, "diasBloqueados"), {
+            barbeiroId:  bid,
+            barbeiroNome: window.appState.usuarioAtual?.name || "",
+            data:        data,
+            motivo:      motivo || "Indisponível",
+            criadoEm:    new Date().toISOString()
+        });
+
+        document.getElementById("bloquear-dia-input").value = "";
+        document.getElementById("bloquear-dia-motivo").value = "";
+        await window.renderizarListaDiasBloqueados();
+        alert(`✅ Dia ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} bloqueado com sucesso!`);
+
+    } catch (error) {
+        console.error("Erro ao bloquear dia:", error);
+        alert("Erro ao salvar o bloqueio.");
+    } finally {
+        btn.innerHTML = textoOriginal;
+        btn.disabled  = false;
+    }
+};
+
+window.desbloquearDia = async (docId, dataTexto) => {
+    if (!confirm(`Desbloquear o dia ${dataTexto}?`)) return;
+    try {
+        await window.deleteDoc(window.doc(window.db, "diasBloqueados", docId));
+        await window.renderizarListaDiasBloqueados();
+    } catch (error) {
+        console.error("Erro ao desbloquear dia:", error);
+        alert("Erro ao remover o bloqueio.");
+    }
+};
+
+window.renderizarListaDiasBloqueados = async () => {
+    const c   = document.getElementById("lista-dias-bloqueados");
+    const bid = window.appState.usuarioAtual?.id;
+    if (!c) return;
+
+    c.innerHTML = '<p style="font-size:.8rem; color:#6c757d;">Carregando dias bloqueados...</p>';
+
+    try {
+        const snap = await window.getDocs(window.collection(window.db, "diasBloqueados"));
+        const bloqueados = [];
+        snap.forEach(d => {
+            const dado = d.data();
+            if (String(dado.barbeiroId) === String(bid)) bloqueados.push({ id: d.id, ...dado });
+        });
+
+        bloqueados.sort((a, b) => a.data.localeCompare(b.data));
+
+        if (!bloqueados.length) {
+            c.innerHTML = '<p style="font-size:.8rem; color:#6c757d; margin:0;">Nenhum dia bloqueado no momento.</p>';
+            return;
+        }
+
+        c.innerHTML = `
+            <p style="font-size:.8rem; font-weight:600; margin-bottom:.5rem; color:#495057;">Dias já bloqueados:</p>
+            <ul class="list-group list-group-flush" style="font-size:.85rem;">
+                ${bloqueados.map(b => {
+                    const dtFormatada = new Date(b.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday:"short", day:"numeric", month:"short" });
+                    return `<li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <div>
+                            <i class="bi bi-lock-fill text-danger me-1"></i>
+                            <strong>${dtFormatada}</strong>
+                            ${b.motivo ? `<span class="text-muted ms-1">— ${b.motivo}</span>` : ""}
+                        </div>
+                        <button class="btn btn-sm btn-outline-success" style="padding:.2rem .6rem; font-size:.75rem;"
+                            onclick="window.desbloquearDia('${b.id}', '${dtFormatada}')">
+                            <i class="bi bi-unlock"></i> Desbloquear
+                        </button>
+                    </li>`;
+                }).join("")}
+            </ul>
+        `;
+    } catch (error) {
+        console.error("Erro ao listar dias bloqueados:", error);
+        c.innerHTML = '<p style="font-size:.8rem; color:red;">Erro ao carregar bloqueios.</p>';
+    }
+};
+
+// 6. RELATÓRIO INDIVIDUAL DO BARBEIRO
 window.abrirModalRelatorioBarbeiro = () => {
     document.getElementById("resultado-relatorio-barbeiro").innerHTML = ""; 
     new bootstrap.Modal(document.getElementById("modalRelatorioBarbeiro")).show();
