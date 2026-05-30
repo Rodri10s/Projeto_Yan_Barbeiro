@@ -90,20 +90,10 @@
                 placeholder="Insira o seu nome"
                 required
               />
-              <small
-                style="
-                  color: var(--text-muted);
-                  font-size: 0.78rem;
-                  margin-top: 0.3rem;
-                  display: block;
-                "
-                >Demo: Yan</small
-              >
             </div>
             <div class="mb-4">
               <label for="barbeiro-password" class="form-label">Palavra-passe</label>
               <input type="password" id="barbeiro-password" class="form-control" placeholder="Insira a palavra-passe" required />
-              <small style="color: var(--text-muted); font-size: 0.78rem; margin-top: 0.3rem; display: block;">Demo: 123</small>
             </div>
             </div>
             <button
@@ -145,15 +135,6 @@
                 placeholder="Insira a palavra-passe"
                 required
               />
-              <small
-                style="
-                  color: var(--text-muted);
-                  font-size: 0.78rem;
-                  margin-top: 0.3rem;
-                  display: block;
-                "
-                >Demo: password123</small
-              >
             </div>
             <button
               type="button"
@@ -249,25 +230,8 @@
           </div>
         </div>
 
-        <div class="wizard-step" id="step-endereco">
-          <p class="wizard-title">Passo 4 — Escolher Local</p>
-          <div id="lista-enderecos-cliente" class="enderecos-lista">
-            <div class="text-center my-3">
-              <span class="spinner-border spinner-border-sm text-primary"></span> Carregando endereços...
-            </div>
-          </div>
-          <div class="d-flex gap-2 mt-4">
-            <button type="button" class="btn btn-outline btn-lg flex-grow-1" id="btn-voltar-endereco-wizard">
-              <i class="bi bi-arrow-left"></i> Voltar
-            </button>
-            <button type="button" class="btn btn-primary btn-lg flex-grow-1" id="btn-next-endereco" disabled>
-              Continuar <i class="bi bi-arrow-right"></i>
-            </button>
-          </div>
-        </div>
-
         <div class="wizard-step" id="step-resumo">
-          <p class="wizard-title">Passo 5 — Confirmação</p>
+          <p class="wizard-title">Passo 4 — Confirmação</p>
           <div class="resumo-card">
             <div class="resumo-item">
               <span class="resumo-label"
@@ -729,6 +693,7 @@
          background:rgba(0,0,0,.55);backdrop-filter:blur(3px);
          align-items:center;justify-content:center;">
       <div class="sucesso-card">
+        <span class="fechar-x" onclick="window.fecharModalSucesso()" style="position:absolute; top:15px; right:20px; font-size:1.8rem; cursor:pointer; color:#888; line-height: 1;">&times;</span>
         <div class="sucesso-icon-wrap">
           <i class="bi bi-check-lg sucesso-icon"></i>
         </div>

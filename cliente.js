@@ -230,6 +230,9 @@ window.gerarSlotsDisponiveis = async (barbeiro, data, duracaoMin) => {
         // Verifica se o slot cruza com o horário de almoço
         const noAlmoco = (cur < fimAlmoco && sf > inicioAlmoco);
         
+        // MODIFICAÇÃO: Se for horário de almoço, pula a iteração e não renderiza nada
+        if (noAlmoco) continue;
+        
         // Verifica se cruza com outro agendamento
         const ocupado = agendados.some(ag => cur < ag.fim && sf > ag.ini);
         
@@ -238,7 +241,7 @@ window.gerarSlotsDisponiveis = async (barbeiro, data, duracaoMin) => {
 
         slots.push({ 
             hhmm: toHHMM(cur), 
-            disponivel: !ocupado && !passado && !noAlmoco 
+            disponivel: !ocupado && !passado
         });
     }
     return slots;
@@ -356,13 +359,15 @@ window.atualizarResumo = () => {
 window.passarStep = n => {
     window.appState.currentStep = n;
     document.querySelectorAll(".wizard-step").forEach(s=>s.classList.remove("active"));
-    const ids = ["step-servico","step-profissional","step-horario","step-endereco","step-resumo"];
+    
+    // MODIFICAÇÃO: Array atualizado, sem o "step-endereco"
+    const ids = ["step-servico","step-profissional","step-horario","step-resumo"];
     document.getElementById(ids[n-1]).classList.add("active");
+    
     if      (n===1) window.renderizarServicos();
     else if (n===2) window.renderizarBarbeiros();
     else if (n===3) _entrarStepHorario();
-    else if (n===4) window.renderizarEnderecosCliente();
-    else if (n===5) window.atualizarResumo();
+    else if (n===4) window.atualizarResumo(); // n=4 agora vai direto para o resumo
 };
 window.voltarStep = n => window.passarStep(n);
 
@@ -479,9 +484,27 @@ window.resetarWizard = () => {
 };
 
 /* ── GERADOR DE CALENDÁRIO PERSONALIZADO (CHIPS) ──────────── */
-window.iniciarCalendario = () => {
+window.iniciarCalendario = async () => {
     const container = document.getElementById("date-chips");
     if (!container) return;
+
+    // MODIFICAÇÃO: Busca os dias bloqueados para o barbeiro atual
+    const bid = window.appState.agendamento?.barbeiroId;
+    let diasBloqueadosSet = new Set();
+
+    if (bid) {
+        try {
+            const snapBloqueios = await window.getDocs(window.collection(window.db, "diasBloqueados"));
+            snapBloqueios.forEach(d => {
+                const dado = d.data();
+                if (String(dado.barbeiroId) === String(bid)) {
+                    diasBloqueadosSet.add(dado.data);
+                }
+            });
+        } catch (e) {
+            console.error("Erro ao carregar dias bloqueados no calendário:", e);
+        }
+    }
 
     let html = '';
     const hoje = new Date();
@@ -494,6 +517,9 @@ window.iniciarCalendario = () => {
         const dataISO = dataAtual.toISOString().split("T")[0];
         const diaSemana = dataAtual.getDay(); // 0 = Domingo
 
+        // MODIFICAÇÃO: Se for domingo ou dia bloqueado, pula e não renderiza o botão
+        if (diaSemana === 0 || diasBloqueadosSet.has(dataISO)) continue;
+
         const diasNome = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
         const mesesNome = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
@@ -501,11 +527,8 @@ window.iniciarCalendario = () => {
         const dia = String(dataAtual.getDate()).padStart(2, '0');
         const mes = mesesNome[dataAtual.getMonth()];
 
-        // Se for domingo, a classe disabled deixa o botão cinza e impossível de clicar
-        const isDomingo = (diaSemana === 0) ? 'date-chip--disabled' : '';
-
         html += `
-            <div class="date-chip ${isDomingo}" id="chip-${dataISO}" onclick="window.selecionarDataChip('${dataISO}')">
+            <div class="date-chip" id="chip-${dataISO}" onclick="window.selecionarDataChip('${dataISO}')">
                 <span class="date-chip__dow">${nomeDia}</span>
                 <span class="date-chip__day">${dia}</span>
                 <span class="date-chip__mon">${mes}</span>
@@ -514,7 +537,6 @@ window.iniciarCalendario = () => {
     }
     container.innerHTML = html;
 };
-
 /* Ação ao clicar no dia */
 window.selecionarDataChip = (dataISO) => {
     // Remove a cor azul de todos os dias
@@ -540,17 +562,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const emailInput = document.getElementById("cliente-email");
     if (emailInput) aplicarValidacaoEmail(emailInput);
 
-    // CORREÇÃO: Dispara a função que desenha os botões de dia na tela
     window.iniciarCalendario();
 
     document.getElementById("btn-iniciar-agendamento").addEventListener("click", window.iniciarAgendamento);
     document.getElementById("btn-next-servico").addEventListener("click",    () => window.passarStep(2));
     document.getElementById("btn-next-barbeiro").addEventListener("click",   () => window.passarStep(3));
-    document.getElementById("btn-next-horario").addEventListener("click",    () => window.passarStep(4));
-    document.getElementById("btn-next-endereco").addEventListener("click",   () => window.passarStep(5));
+    
+    // MODIFICAÇÃO: Pula do horário direto pro resumo (passo 4)
+    document.getElementById("btn-next-horario").addEventListener("click",    () => window.passarStep(4)); 
+    
     document.getElementById("btn-voltar-barbeiro-wizard").addEventListener("click",  () => window.voltarStep(1));
     document.getElementById("btn-voltar-horario-wizard").addEventListener("click",   () => window.voltarStep(2));
-    document.getElementById("btn-voltar-endereco-wizard").addEventListener("click",  () => window.voltarStep(3));
-    document.getElementById("btn-voltar-resumo-wizard").addEventListener("click",    () => window.voltarStep(4));
+    
+    // MODIFICAÇÃO: Do resumo (passo 4) volta direto pro horário (passo 3)
+    document.getElementById("btn-voltar-resumo-wizard").addEventListener("click",    () => window.voltarStep(3)); 
+    
     document.getElementById("btn-confirmar-agendamento").addEventListener("click",   window.confirmarAgendamento);
 });
