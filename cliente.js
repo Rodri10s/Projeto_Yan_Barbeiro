@@ -167,6 +167,8 @@ window.selecionarBarbeiro = (id, evt) => {
     document.querySelectorAll(".barbeiro-card").forEach(c=>c.classList.remove("selected"));
     (evt?.target||event.target).closest(".barbeiro-card").classList.add("selected");
     document.getElementById("btn-next-barbeiro").disabled = false;
+    // Recarrega o calendário para mostrar os dias bloqueados deste barbeiro
+    if (window.iniciarCalendario) window.iniciarCalendario();
 };
 
 /* ── STEP 3 — data + horários ─────────────────────────────── */
@@ -189,6 +191,18 @@ window.gerarSlotsDisponiveis = async (barbeiro, data, duracaoMin) => {
         const meioDia = 12 * 60;
         if (fim > meioDia) fim = meioDia;
     }
+
+    // REGRA BLOQUEIO: Verifica se o barbeiro bloqueou este dia no Firebase
+    try {
+        const snapBloqueios = await getDocs(collection(db, "diasBloqueados"));
+        for (const d of snapBloqueios.docs) {
+            const dado = d.data();
+            if (dado.data === data && String(dado.barbeiroId) === String(barbeiro.id)) {
+                // Dia bloqueado — retorna array vazio marcado como bloqueado
+                return [{ bloqueado: true, motivo: dado.motivo || "Indisponível" }];
+            }
+        }
+    } catch(e) { console.error("Erro ao verificar dias bloqueados:", e); }
 
     let agendados = [];
     try {
@@ -265,6 +279,18 @@ window.renderizarHorarios = async () => {
     document.getElementById("btn-next-horario").disabled = true;
     grade.innerHTML = `<div class="text-center my-2 w-100"><span class="spinner-border spinner-border-sm text-primary"></span> Verificando disponibilidade...</div>`;
     const slots = await window.gerarSlotsDisponiveis(b, data, svc.duration);
+
+    // Verifica se o dia foi bloqueado pelo barbeiro
+    if (slots.length === 1 && slots[0].bloqueado) {
+        grade.innerHTML = `<p class="text-danger fw-semibold text-center mt-3" style="font-size:.9rem;">
+            <i class="bi bi-lock-fill" style="font-size:1.5rem; display:block; margin-bottom:5px;"></i>
+            O profissional não estará disponível neste dia.<br>
+            <small class="text-muted fw-normal">${slots[0].motivo}</small>
+        </p>`;
+        document.getElementById("btn-next-horario").disabled = true;
+        if (hint){ hint.textContent="Dia indisponível"; hint.className="date-picker-hint text-danger"; }
+        return;
+    }
 
     if (!slots.length){
         grade.innerHTML = `<p class="text-muted" style="font-size:.875rem">Nenhum horário gerado (verifique a escala ou horário limite).</p>`;
