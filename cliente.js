@@ -444,22 +444,46 @@ window.confirmarAgendamento = async () => {
         completed:      false, cancelado: false
     };
     try {
+        // 1. Salva o agendamento no Firebase
         const ref = await addDoc(collection(db,"agendamentos"), novoAg);
         if (window.mockBookings) window.mockBookings.push({ id:ref.id, ...novoAg });
 
+        // 2. Chama a API da Vercel para enviar o e-mail
+        const dataFormatada = new Date(ag.data + "T12:00:00").toLocaleDateString("pt-BR");
+        const endTxt = end ? `${end.rua}, ${end.numero} — ${end.bairro}` : "Endereço não cadastrado";
+
+        try {
+            await fetch('/api/enviar-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nome: cli.nome,
+                    email: cli.email,
+                    servico: ag.servicoNome,
+                    barbeiro: ag.barbeiroNome,
+                    data: dataFormatada,
+                    horario: ag.horario,
+                    preco: Number(ag.servico.price).toFixed(2),
+                    endereco: endTxt
+                })
+            });
+            // O fetch envia os dados para o backend de forma invisível.
+        } catch (mailError) {
+            console.error("Erro na requisição de e-mail (não impede o agendamento):", mailError);
+        }
+
+        // 3. Limpa os campos e abre o modal de sucesso
         ["cliente-nome","cliente-telefone","cliente-email"].forEach(id => {
             const input = document.getElementById(id);
             if(input) input.value="";
         });
 
-        // Invoca a janela modal com o endereço correto
         window.abrirModalSucesso(novoAg, window.appState.enderecoAtivo);
 
     } catch(e) {
         console.error("Erro ao salvar:", e);
         alert("Erro na ligação ao servidor.\\nVerifique a sua internet ou as Regras do Firestore.\\nDetalhe: " + e.message);
     } finally {
-        // GARANTE QUE O BOTÃO PARA DE GIRAR
         btn.innerHTML = orig;
         btn.disabled  = false;
     }
