@@ -430,7 +430,7 @@ window.confirmarAgendamento = async () => {
     btn.disabled  = true;
     const iniMin = toMin(ag.horario);
     const fimMin = iniMin + ag.servico.duration;
-    const end    = ag.endereco;
+    const end    = window.appState.enderecoAtivo;
     const novoAg = {
         clientName:     cli.nome,      clientTelefone: cli.telefone, clientEmail: cli.email,
         servicoId:      ag.servicoId,  servicoNome:    ag.servicoNome,
