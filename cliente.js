@@ -479,23 +479,9 @@ window.resetarWizard = () => {
 };
 
 /* ── GERADOR DE CALENDÁRIO PERSONALIZADO (CHIPS) ──────────── */
-window.iniciarCalendario = async () => {
+window.iniciarCalendario = () => {
     const container = document.getElementById("date-chips");
     if (!container) return;
-
-    // Busca dias bloqueados do Firebase para destacar no calendário
-    let diasBloqueadosSet = new Set();
-    try {
-        const bid = window.appState?.agendamento?.barbeiroId;
-        const snapBloqueios = await getDocs(collection(db, "diasBloqueados"));
-        snapBloqueios.forEach(d => {
-            const dado = d.data();
-            // Se há barbeiro selecionado, filtra por ele; caso contrário carrega todos
-            if (!bid || String(dado.barbeiroId) === String(bid)) {
-                diasBloqueadosSet.add(dado.data);
-            }
-        });
-    } catch(e) { console.error("Erro ao carregar dias bloqueados no calendário:", e); }
 
     let html = '';
     const hoje = new Date();
@@ -508,27 +494,21 @@ window.iniciarCalendario = async () => {
         const dataISO = dataAtual.toISOString().split("T")[0];
         const diaSemana = dataAtual.getDay(); // 0 = Domingo
 
-        const diasNome  = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+        const diasNome = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
         const mesesNome = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
         const nomeDia = diasNome[diaSemana];
-        const dia     = String(dataAtual.getDate()).padStart(2, '0');
-        const mes     = mesesNome[dataAtual.getMonth()];
+        const dia = String(dataAtual.getDate()).padStart(2, '0');
+        const mes = mesesNome[dataAtual.getMonth()];
 
-        // Domingos são removidos completamente do calendário
-        if (diaSemana === 0) continue;
-
-        // Dia bloqueado pelo barbeiro = desabilitado com ícone de cadeado
-        const isBloqueado = diasBloqueadosSet.has(dataISO);
-        const classeDesabilitado = isBloqueado ? 'date-chip--disabled' : '';
-        const titleAttr = isBloqueado ? ' title="Dia bloqueado pelo profissional"' : '';
+        // Se for domingo, a classe disabled deixa o botão cinza e impossível de clicar
+        const isDomingo = (diaSemana === 0) ? 'date-chip--disabled' : '';
 
         html += `
-            <div class="date-chip ${classeDesabilitado}" id="chip-${dataISO}" onclick="window.selecionarDataChip('${dataISO}')"${titleAttr}>
+            <div class="date-chip ${isDomingo}" id="chip-${dataISO}" onclick="window.selecionarDataChip('${dataISO}')">
                 <span class="date-chip__dow">${nomeDia}</span>
                 <span class="date-chip__day">${dia}</span>
                 <span class="date-chip__mon">${mes}</span>
-                ${isBloqueado ? '<span style="font-size:.55rem;color:#ef4444;line-height:1;">🔒</span>' : ''}
             </div>
         `;
     }
@@ -537,10 +517,6 @@ window.iniciarCalendario = async () => {
 
 /* Ação ao clicar no dia */
 window.selecionarDataChip = (dataISO) => {
-    // Impede seleção de dias desabilitados (domingos e dias bloqueados)
-    const chip = document.getElementById(`chip-${dataISO}`);
-    if (chip && chip.classList.contains("date-chip--disabled")) return;
-
     // Remove a cor azul de todos os dias
     document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('date-chip--selected'));
     
